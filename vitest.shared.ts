@@ -1,7 +1,7 @@
 import * as path from "node:path"
-import type { ViteUserConfig } from "vitest/config"
+import { defineConfig } from "vitest/config"
 
-const config: ViteUserConfig = {
+export default defineConfig({
   esbuild: {
     target: "es2020"
   },
@@ -13,11 +13,13 @@ const config: ViteUserConfig = {
     fakeTimers: {
       toFake: undefined
     },
+    projects: [
+      "./packages/*/vitest.config.ts",
+      "./packages/ai/*/vitest.config.ts"
+    ],
     sequence: {
       concurrent: true
     },
     include: ["test/**/*.test.ts"]
   }
-}
-
-export default config
+})
