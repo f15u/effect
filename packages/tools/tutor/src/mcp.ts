@@ -72,6 +72,17 @@ const askInstall = McpServer.elicit({
   Effect.catchTag("ElicitationDeclined", () => Effect.succeed(false)),
 )
 
+const askOwn = (file: string, quote: string) =>
+  McpServer.elicit({
+    message: `Is this your code?\nFile: ${file}\nLine: ${quote.trim()}`,
+    schema: Schema.Struct({
+      confirmed: Schema.Boolean.annotate({ title: "Yes, this is my code" }),
+    }),
+  }).pipe(
+    Effect.map((reply) => reply.confirmed),
+    Effect.catchTag("ElicitationDeclined", () => Effect.succeed(false)),
+  )
+
 const prop = (description: string, extra: Record<string, unknown> = {}) => ({
   type: "string",
   description,
@@ -297,6 +308,30 @@ export const registerTools = Effect.gen(function* () {
     { said: prop("The learner's own words asking for the solution") },
     [],
     (payload) => via("solution", Commands.solution(string(payload, "said"))),
+  )
+  yield* add(
+    "confirm",
+    "Checks a file of the learner's own project: the file path and one exact line of it. Never returns file contents and never changes a file. A form then asks the learner if it is their code; only their yes records the concept.",
+    {
+      file: prop("Path of a source file the learner tagged"),
+      quote: prop("One exact line of that file"),
+    },
+    ["file", "quote"],
+    (payload) =>
+      Effect.gen(function* () {
+        const canAsk =
+          (yield* McpServer.clientCapabilities).elicitation !== undefined
+        const file = string(payload, "file")
+        const quote = string(payload, "quote")
+        return yield* via(
+          "confirm",
+          Commands.confirm(
+            file,
+            quote,
+            canAsk ? Option.some(askOwn(file, quote)) : Option.none(),
+          ),
+        )
+      }),
   )
   yield* add("reset", "Restores the starter file.", {}, [], () =>
     via("reset", Commands.reset),

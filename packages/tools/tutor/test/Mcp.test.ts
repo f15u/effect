@@ -344,32 +344,133 @@ describe("tutor mcp probe", () => {
   )
 })
 
-describe("tutor mcp replay", () => {
+const yes = { action: "accept", content: { confirmed: true } } as const
+
+const owner =
+  (reply: ElicitAnswer) =>
+  (request: ElicitRequest): ElicitAnswer =>
+    request.properties.choice === undefined
+      ? reply
+      : choices(request).includes(nothingForNow)
+        ? pick(taggedErrors.goal!)
+        : pick(notSure)
+
+describe("tutor mcp project work", () => {
   live(
-    "an answered replay on a trusted session goes to the next probe",
+    "a made-up path or quote fails the file check and records nothing",
     Effect.gen(function* () {
-      const s = yield* mcpSession({ capabilities: canAsk })
-      yield* s.write(
-        ".effect-tutor.json",
-        JSON.stringify({
-          phase: "Replaying",
-          goal: "catch-a-defect",
-          path: ["tagged-errors", "catch-a-defect"],
-          exercise: "",
-          hints: 0,
-          evidence: { "tagged-errors": "Proved" },
-          trusted: true,
-        }),
+      const s = yield* mcpSession({ capabilities: canAsk, answer: owner(yes) })
+      yield* s.write("app/db.ts", "export const rows = 1\n")
+      yield* s.tool("tutor_goal")
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "project" })
+      for (const args of [
+        { file: "app/nope.ts", quote: "export const rows = 1" },
+        { file: "app/db.ts", quote: "export const cols = 2" },
+      ]) {
+        const r = yield* s.tool("tutor_confirm", args)
+        assert.isTrue(r.isError)
+      }
+      assert.lengthOf(
+        s.asked.filter((item) => item.properties.confirmed),
+        0,
       )
-      assert.include(yield* s.tools, "tutor_replay")
-      const bad = yield* s.tool("tutor_replay", { how: "later" })
-      assert.isTrue(bad.isError)
-      const r = yield* s.tool("tutor_replay", { how: "answered" })
+      assert.deepStrictEqual((yield* s.state).evidence, {})
+    }),
+  )
+
+  live(
+    "a yes in the form records explained; the form shows the path and the line",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({ capabilities: canAsk, answer: owner(yes) })
+      yield* s.write("app/db.ts", "const a = 1\nexport const rows = 1\n")
+      yield* s.tool("tutor_goal")
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "project" })
+      const r = yield* s.tool("tutor_confirm", {
+        file: "app/db.ts",
+        quote: "export const rows = 1",
+      })
       assert.isFalse(r.isError)
-      assert.include(r.out, "tutor_probe")
-      const state = yield* s.state
-      assert.strictEqual(state.phase, "Probing")
-      assert.deepStrictEqual(state.path, ["catch-a-defect"])
+      const form = s.asked.find((item) => item.properties.confirmed)!
+      assert.include(form.message, "app/db.ts")
+      assert.include(form.message, "export const rows = 1")
+      assert.include(form.message, "Is this your code?")
+      assert.deepStrictEqual((yield* s.state).evidence, {
+        "tagged-errors": "Explained",
+      })
+    }),
+  )
+
+  live(
+    "a no in the form records nothing and keeps the learner in project work",
+    Effect.gen(function* () {
+      const no = { action: "accept", content: { confirmed: false } } as const
+      for (const reply of [no, { action: "decline" } as ElicitAnswer]) {
+        const s = yield* mcpSession({
+          capabilities: canAsk,
+          answer: owner(reply),
+        })
+        yield* s.write("db.ts", "export const rows = 1\n")
+        yield* s.tool("tutor_goal")
+        yield* s.tool("tutor_probe")
+        yield* s.tool("tutor_mode", { mode: "project" })
+        const r = yield* s.tool("tutor_confirm", {
+          file: "db.ts",
+          quote: "export const rows = 1",
+        })
+        assert.lengthOf(
+          s.asked.filter((item) => item.properties.confirmed),
+          1,
+        )
+        assert.include(r.out, "tutor_confirm")
+        const state = yield* s.state
+        assert.deepStrictEqual(state.evidence, {})
+        assert.deepStrictEqual(state.path, ["tagged-errors"])
+      }
+    }),
+  )
+
+  live(
+    "a client with no picker gets the file check only and no evidence",
+    Effect.gen(function* () {
+      const s = yield* mcpSession()
+      yield* s.write("db.ts", "export const rows = 1\n")
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* s.tool("tutor_mode", { mode: "project" })
+      const r = yield* s.tool("tutor_confirm", {
+        file: "db.ts",
+        quote: "export const rows = 1",
+      })
+      assert.isFalse(r.isError)
+      assert.lengthOf(s.asked, 0)
+      assert.deepStrictEqual((yield* s.state).evidence, {})
+    }),
+  )
+
+  live(
+    "output never holds file contents, only source files are read, and no file changes",
+    Effect.gen(function* () {
+      const secret = "const token = 'hunter2-secret'"
+      const code = `${secret}\nexport const rows = 1\n`
+      const s = yield* mcpSession({ capabilities: canAsk, answer: owner(yes) })
+      yield* s.write("db.ts", code)
+      yield* s.write("notes.txt", code)
+      yield* s.tool("tutor_goal")
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "project" })
+      const refused = yield* s.tool("tutor_confirm", {
+        file: "notes.txt",
+        quote: secret,
+      })
+      assert.isTrue(refused.isError)
+      const ok = yield* s.tool("tutor_confirm", {
+        file: "db.ts",
+        quote: "export const rows = 1",
+      })
+      for (const out of [refused.out, ok.out]) assert.notInclude(out, "hunter2")
+      assert.strictEqual(yield* s.read("db.ts"), code)
+      assert.strictEqual(yield* s.read("notes.txt"), code)
     }),
   )
 })

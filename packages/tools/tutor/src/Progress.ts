@@ -11,7 +11,7 @@ export const Phase = Schema.Literals([
   "Probing",
   "ChoosingMode",
   "Working",
-  "Replaying",
+  "ProjectWork",
 ])
 export type Phase = typeof Phase.Type
 

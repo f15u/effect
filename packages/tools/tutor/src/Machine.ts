@@ -73,18 +73,13 @@ export const machine: Record<Phase, ReadonlyArray<Action>> = {
       summary: "restore the starter file and clear the hints",
     },
   ],
-  Replaying: [
+  ProjectWork: [
     {
-      name: "replay",
-      cli: "tutor replay answered",
-      tool: 'tutor_replay {how: "answered"}',
-      summary: "the learner answered the question again",
-    },
-    {
-      name: "replay",
-      cli: "tutor replay skipped",
-      tool: 'tutor_replay {how: "skipped"}',
-      summary: "the learner skipped it",
+      name: "confirm",
+      cli: 'tutor confirm <file> --quote "<a line of the file>"',
+      tool: 'tutor_confirm {file: "<file>", quote: "<a line of the file>"}',
+      summary:
+        "check the learner's file; the learner then confirms it is their code",
     },
   ],
 }

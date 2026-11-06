@@ -100,6 +100,16 @@ const solutionCommand = Command.make("solution", {
   Command.withHandler(({ said }) => shell("solution", Commands.solution(said))),
 )
 
+const confirmCommand = Command.make("confirm", {
+  file: Argument.String("file"),
+  quote: Flag.String("quote").pipe(Flag.withDefault("")),
+}).pipe(
+  Command.withDescription("Check a line of the learner's own file"),
+  Command.withHandler(({ file, quote }) =>
+    shell("confirm", Commands.confirm(file, quote)),
+  ),
+)
+
 const resetCommand = Command.make("reset").pipe(
   Command.withDescription("Restore the starter file"),
   Command.withHandler(() => shell("reset", Commands.reset)),
@@ -127,6 +137,7 @@ export const command = Command.make("tutor").pipe(
     replayCommand,
     hintCommand,
     solutionCommand,
+    confirmCommand,
     resetCommand,
     mcpCommand,
     setupCommand,

@@ -189,18 +189,8 @@ describe("the transition table", () => {
       t("goal", "tagged-errors").pipe(
         Effect.andThen(t("mode", "exercise", "practice")),
       ),
-    Replaying: (_, write) =>
-      write(
-        ".effect-tutor.json",
-        JSON.stringify({
-          phase: "Replaying",
-          goal: "catch-a-defect",
-          path: ["tagged-errors", "catch-a-defect"],
-          exercise: "",
-          hints: 0,
-          evidence: { "tagged-errors": "Proved" },
-        }),
-      ),
+    ProjectWork: (t) =>
+      t("goal", "tagged-errors").pipe(Effect.andThen(t("mode", "project"))),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
     goal: ["tagged-errors"],
@@ -210,7 +200,7 @@ describe("the transition table", () => {
     hint: [],
     solution: [],
     reset: [],
-    replay: ["skipped"],
+    confirm: ["app.ts", "--quote", "x"],
   }
 
   for (const phase of Object.keys(reach) as Array<Phase>) {

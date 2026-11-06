@@ -45,6 +45,11 @@ const instruction = (state: State) =>
         const concept = curriculum.concept(state.path[0]!)
         return `The learner edits ${state.exercise}/main.ts. Teach "${concept.title}" by asking questions. Key idea (do not recite it): ${concept.keyIdea}\nHints used: ${state.hints}/${concept.hints.length}.`
       }
+      case "ProjectWork": {
+        const curriculum = yield* Curriculum
+        const concept = curriculum.concept(state.path[0]!)
+        return `Ask the learner to tag the files or folders in their own project where "${concept.title}" applies. Read them with your own tools. Ask where the idea shows in their code, in a plain chat message: the learner types the answer, so use no choice tool. Key idea (do not recite it): ${concept.keyIdea}\nTo record it, pick one line of their code and confirm it with the file path and the exact line.`
+      }
     }
   })
 
@@ -132,6 +137,13 @@ export const mode = (
   surface: Surface = "shell",
 ) =>
   Effect.gen(function* () {
+    if (choice === "project") {
+      yield* (yield* Progress).update((current) => ({
+        ...current,
+        phase: "ProjectWork",
+      }))
+      return []
+    }
     if (choice !== "exercise") return []
     if (Option.isNone(folder))
       return [
@@ -279,6 +291,57 @@ export const solution = (said: string) =>
       yield* curriculum.file(concept, "solution.ts"),
       "The learner must type it into their file themselves.",
     ]
+  })
+
+const sourceFile = /\.(?:[cm]?[jt]s|[jt]sx)$/
+
+const notFound = (file: string) =>
+  new TutorError({
+    reason: "BadArgument",
+    message: `${file} is not a source file of the learner's project that holds that line. Ask which file shows it, read it again, and quote one line exactly.`,
+  })
+
+export const confirm = (
+  file: string,
+  quote: string,
+  ask: Option.Option<Effect.Effect<boolean, never, any>> = Option.none(),
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const line = quote.trim()
+    const held =
+      line !== "" &&
+      sourceFile.test(file) &&
+      (yield* fs.readFileString(file).pipe(
+        Effect.map((source) =>
+          source.split("\n").some((each) => each.trim() === line),
+        ),
+        Effect.orElseSucceed(() => false),
+      ))
+    if (!held) return yield* notFound(file)
+    if (Option.isNone(ask))
+      return [
+        "The file holds that line. This client cannot ask the learner, so nothing is recorded. Go on teaching in chat.",
+      ]
+    if (!(yield* ask.value))
+      return [
+        "The learner said this is not their code. Nothing is recorded. Ask which file is theirs.",
+      ]
+    const { state, concept } = yield* working
+    const rest = state.path.slice(1)
+    yield* (yield* Progress).update((current) => ({
+      ...current,
+      phase:
+        rest.length === 0
+          ? "Menu"
+          : current.trusted
+            ? "Probing"
+            : "ChoosingMode",
+      path: rest,
+      goal: rest.length === 0 ? "" : current.goal,
+      evidence: { ...current.evidence, [concept.id]: "Explained" },
+    }))
+    return ["The learner confirmed this is their code."]
   })
 
 export const reset = Effect.gen(function* () {
