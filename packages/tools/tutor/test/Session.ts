@@ -11,14 +11,18 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
 export const TestLayer = NodeServices.layer
 
 const phaseNames =
-  /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|Retelling|\bOffering\b|\bFinished\b|Replaying/
+  /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|\bOffering\b|\bFinished\b|Replaying/
+
+const bannedWords = /retell|payoff/i
 
 const clean = <A extends { readonly out: string }>(result: A) =>
   result.out.includes("[object Object]")
     ? Effect.die(new Error(`[object Object] in output:\n${result.out}`))
-    : phaseNames.test(result.out)
-      ? Effect.die(new Error(`phase name in output:\n${result.out}`))
-      : Effect.succeed(result)
+    : bannedWords.test(result.out)
+      ? Effect.die(new Error(`banned word in output:\n${result.out}`))
+      : phaseNames.test(result.out)
+        ? Effect.die(new Error(`phase name in output:\n${result.out}`))
+        : Effect.succeed(result)
 
 export const session = (options: { readonly npm?: boolean } = {}) =>
   Effect.gen(function* () {
