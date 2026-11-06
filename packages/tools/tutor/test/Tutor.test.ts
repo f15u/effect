@@ -38,13 +38,27 @@ describe("status in an empty folder", () => {
 
 describe("the first write", () => {
   live(
-    "names the state file and says why, then writes it",
+    "the first goal call names the state file and why, and writes nothing",
     Effect.gen(function* () {
       const s = yield* session()
       const r = yield* s.t("goal", "tagged-errors")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, ".effect-tutor.json")
       assert.match(r.out, /progress/)
+      assert.include(r.out, "--write")
+      assert.deepStrictEqual(yield* s.files, [])
+      const status = yield* s.t("status")
+      assert.include(status.out, "tutor goal")
+    }),
+  )
+
+  live(
+    "the repeat with the write flag writes the file",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("goal", "tagged-errors", "--write")
+      assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
       const again = yield* s.t("status")
       assert.include(again.out, "exercise")
@@ -55,7 +69,7 @@ describe("the first write", () => {
     "the notice comes once, not on later writes",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const second = yield* s.t("status")
       assert.notInclude(second.out, "now writes")
     }),
@@ -67,7 +81,7 @@ describe("a goal and its path", () => {
     "a goal built on another concept gives the path in order",
     Effect.gen(function* () {
       const s = yield* session()
-      const r = yield* s.t("goal", "catch-a-defect")
+      const r = yield* s.t("goal", "catch-a-defect", "--write")
       assert.strictEqual(r.code, 0)
       const first = r.out.indexOf("Errors that TypeScript can tell apart")
       const second = r.out.indexOf(
@@ -94,7 +108,7 @@ describe("evidence and the path", () => {
           evidence: { "tagged-errors": "Proved" },
         }),
       )
-      const r = yield* s.t("goal", "catch-a-defect")
+      const r = yield* s.t("goal", "catch-a-defect", "--write")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, "Containing an unexpected failure at a boundary")
       assert.notInclude(r.out, "Errors that TypeScript can tell apart")
@@ -139,8 +153,8 @@ describe("refusals", () => {
       assert.strictEqual(refused.code, 1)
       assert.include(refused.out, "Not now.")
       assert.include(refused.out, "tutor goal")
-      yield* s.t("goal", "tagged-errors")
-      const again = yield* s.t("goal", "catch-a-defect")
+      yield* s.t("goal", "tagged-errors", "--write")
+      const again = yield* s.t("goal", "catch-a-defect", "--write")
       assert.strictEqual(again.code, 1)
       assert.include(again.out, "Not now.")
       assert.include(again.out, "tutor mode exercise")
@@ -184,13 +198,15 @@ describe("the transition table", () => {
           trusted: true,
         }),
       ),
-    ChoosingMode: (t) => t("goal", "tagged-errors"),
+    ChoosingMode: (t) => t("goal", "tagged-errors", "--write"),
     Working: (t) =>
-      t("goal", "tagged-errors").pipe(
+      t("goal", "tagged-errors", "--write").pipe(
         Effect.andThen(t("mode", "exercise", "practice")),
       ),
     ProjectWork: (t) =>
-      t("goal", "tagged-errors").pipe(Effect.andThen(t("mode", "project"))),
+      t("goal", "tagged-errors", "--write").pipe(
+        Effect.andThen(t("mode", "project")),
+      ),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
     goal: ["tagged-errors"],
@@ -227,7 +243,7 @@ describe("exercise mode", () => {
     "writes nothing until the learner names a folder",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise")
       assert.strictEqual(r.code, 0)
       assert.match(r.out, /folder name/)
@@ -240,7 +256,7 @@ describe("exercise mode", () => {
     "writes the starter, package.json and tsconfig.json in the named folder and says why",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.read("practice/main.ts"), starter)
@@ -258,7 +274,7 @@ describe("exercise mode", () => {
     "never overwrites a file and says it kept it",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       yield* s.t("mode", "exercise", "practice")
       yield* s.write("practice/main.ts", "my work")
       yield* s.write("practice/package.json", '{"name":"mine"}')
@@ -284,7 +300,7 @@ describe("exercise mode", () => {
         "package.json",
         JSON.stringify({ dependencies: { effect: "^4.0.0" } }),
       )
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise", "sub/practice", "--install")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.read("sub/practice/main.ts"), starter)
@@ -307,7 +323,7 @@ describe("exercise mode", () => {
         "practice/package.json",
         JSON.stringify({ devDependencies: { effect: "^4.0.0" } }),
       )
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise", "practice", "--install")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.nested("practice"), [
@@ -322,7 +338,7 @@ describe("exercise mode", () => {
     "installs effect and typescript only when the yes flag is passed, and says so",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const no = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(yield* s.installs, "")
       assert.match(no.out, /--install/)
@@ -340,7 +356,7 @@ describe("exercise mode", () => {
     "refuses a folder outside the current folder and writes nothing",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise", "../escape")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "relative path")
@@ -354,7 +370,7 @@ describe("a missing npm", () => {
     "refuses the install with a clear message and does not crash",
     Effect.gen(function* () {
       const s = yield* session({ npm: false })
-      yield* s.t("goal", "tagged-errors")
+      yield* s.t("goal", "tagged-errors", "--write")
       const r = yield* s.t("mode", "exercise", "practice", "--install")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "npm")
@@ -398,7 +414,7 @@ const seeded = Effect.gen(function* () {
       evidence: middle,
     }),
   )
-  yield* s.t("goal", "catch-a-defect")
+  yield* s.t("goal", "catch-a-defect", "--write")
   yield* s.t("mode", "exercise", "practice")
   return s
 })
@@ -406,7 +422,7 @@ const seeded = Effect.gen(function* () {
 const working = (goal = "tagged-errors") =>
   Effect.gen(function* () {
     const s = yield* session()
-    yield* s.t("goal", goal)
+    yield* s.t("goal", goal, "--write")
     yield* s.t("mode", "exercise", "practice")
     return s
   })
@@ -508,7 +524,7 @@ describe("check", () => {
           evidence: revisiting,
         }),
       )
-      yield* s.t("goal", "catch-a-defect")
+      yield* s.t("goal", "catch-a-defect", "--write")
       yield* s.t("mode", "exercise", "practice")
       const starterText = yield* s.read("practice/main.ts")
       const untouched = yield* s.t("check")
@@ -543,7 +559,7 @@ describe("check", () => {
           evidence: revisiting,
         }),
       )
-      yield* s.t("goal", "catch-a-defect")
+      yield* s.t("goal", "catch-a-defect", "--write")
       yield* s.t("mode", "exercise", "practice")
       yield* s.write("practice/main.ts", "export {}\n")
       yield* s.t("check")

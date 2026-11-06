@@ -71,10 +71,44 @@ describe("tutor mcp", () => {
   )
 
   live(
+    "the first goal call names the state file and writes nothing; the repeat writes",
+    Effect.gen(function* () {
+      const s = yield* mcpSession()
+      const first = yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      assert.isFalse(first.isError)
+      assert.include(first.out, ".effect-tutor.json")
+      assert.include(first.out, "write")
+      assert.deepStrictEqual(yield* s.files, [])
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+    }),
+  )
+
+  live(
+    "the picker names the state file before anything is written",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({
+        capabilities: canAsk,
+        answer: (request) =>
+          request.message.includes(".effect-tutor.json")
+            ? pick(catchADefect.goal!)
+            : { action: "decline" },
+      })
+      const goal = yield* s.tool("tutor_goal")
+      assert.isFalse(goal.isError)
+      assert.include(s.asked[0]!.message, ".effect-tutor.json")
+      assert.strictEqual((yield* s.state).goal, "catch-a-defect")
+    }),
+  )
+
+  live(
     "a whole exercise through the tools writes no agent file",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      const goal = yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const goal = yield* s.tool("tutor_goal", {
+        goals: ["tagged-errors"],
+        write: true,
+      })
       assert.include(goal.out, ".effect-tutor.json")
       const ask = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.include(ask.out, "folder name")
@@ -103,7 +137,8 @@ describe("tutor mcp", () => {
             ? { action: "accept", content: { folder: "practice" } }
             : { action: "accept", content: { install: false } },
       })
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_probe")
       const done = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.isFalse(done.isError)
       const form = s.asked[0]!
@@ -130,11 +165,13 @@ describe("tutor mcp", () => {
               : { action: "accept", content: { install: yes } },
         })
       const no = yield* reply(false)
-      yield* no.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* no.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* no.tool("tutor_probe")
       yield* no.tool("tutor_mode", { mode: "exercise", install: true })
       assert.strictEqual(yield* no.installs, "")
       const yes = yield* reply(true)
-      yield* yes.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* yes.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* yes.tool("tutor_probe")
       yield* yes.tool("tutor_mode", { mode: "exercise" })
       assert.include(yield* yes.installs, "install effect typescript")
     }),
@@ -147,7 +184,8 @@ describe("tutor mcp", () => {
         capabilities: { elicitation: {} },
         answer: () => ({ action: "decline" }),
       })
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_probe")
       const out = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.isTrue(out.isError)
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
@@ -158,7 +196,8 @@ describe("tutor mcp", () => {
     "without elicitation nothing is written until the agent passes a name, and the tool says what it writes",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_probe")
       const ask = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.include(ask.out, "folder name")
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
@@ -186,7 +225,10 @@ describe("tutor mcp trusted channel", () => {
         capabilities: canAsk,
         answer: () => ({ action: "accept", choice: catchADefect.goal! }),
       })
-      const goal = yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const goal = yield* s.tool("tutor_goal", {
+        goals: ["tagged-errors"],
+        write: true,
+      })
       const state = yield* s.state
       assert.strictEqual(state.goal, "catch-a-defect")
       assert.strictEqual(state.trusted, true)
@@ -248,7 +290,10 @@ describe("tutor mcp trusted channel", () => {
     "without elicitation the goal tool takes the id and opens no picker",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      const goal = yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const goal = yield* s.tool("tutor_goal", {
+        goals: ["tagged-errors"],
+        write: true,
+      })
       assert.isFalse(goal.isError)
       assert.lengthOf(s.asked, 0)
       const state = yield* s.state
@@ -489,7 +534,7 @@ describe("tutor mcp project work", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession()
       yield* s.write("db.ts", "export const rows = 1\n")
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
       yield* s.tool("tutor_mode", { mode: "project" })
       const r = yield* s.tool("tutor_confirm", {
         file: "db.ts",

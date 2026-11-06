@@ -42,9 +42,12 @@ const statusCommand = Command.make("status").pipe(
 
 const goalCommand = Command.make("goal", {
   id: Argument.String("goal"),
+  write: Flag.Boolean("write").pipe(Flag.withDefault(false)),
 }).pipe(
   Command.withDescription("Pick a goal"),
-  Command.withHandler(({ id }) => shell("goal", Commands.goal(id))),
+  Command.withHandler(({ id, write }) =>
+    shell("goal", Commands.goal(id, { write })),
+  ),
 )
 
 const probeCommand = Command.make("probe").pipe(

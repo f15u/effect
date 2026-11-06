@@ -103,9 +103,9 @@ const pickGoal = Effect.gen(function* () {
       reason: "NoGoalLeft",
       message: "No goal is left. Every goal is done.",
     })
+  const fresh = !(yield* (yield* Progress).exists)
   const reply = yield* McpServer.elicit({
-    message:
-      "What do you want to be able to do? (Open the list below and choose one.)",
+    message: `${fresh ? `${Commands.stateNotice} It is written when you pick.\n` : ""}What do you want to be able to do? (Open the list below and choose one.)`,
     schema: Schema.Struct({
       choice: Schema.Literals([
         ...open.map((item) => item.label),
@@ -130,7 +130,11 @@ const pickGoal = Effect.gen(function* () {
     })
   const picked = open.find((item) => item.label === reply.choice)!
   const said = (reply.words ?? "").trim()
-  const lines = yield* Commands.goal(picked.id, true)
+  const lines = yield* Commands.goal(picked.id, {
+    trusted: true,
+    write: true,
+    surface: "mcp",
+  })
   return said === "" ? lines : [...lines, `The learner also wrote: "${said}"`]
 })
 
@@ -223,6 +227,11 @@ export const registerTools = Effect.gen(function* () {
         description:
           "One goal id. Only for a client that cannot show a picker.",
       },
+      write: {
+        type: "boolean",
+        description:
+          "Only after you told the learner the file name and why. The first call without it writes nothing.",
+      },
     },
     [],
     (payload) =>
@@ -231,7 +240,15 @@ export const registerTools = Effect.gen(function* () {
           (yield* McpServer.clientCapabilities).elicitation !== undefined
         const goals = field(payload, "goals")
         const given = Array.isArray(goals) ? String(goals[0] ?? "") : ""
-        return yield* via("goal", canAsk ? pickGoal : Commands.goal(given))
+        return yield* via(
+          "goal",
+          canAsk
+            ? pickGoal
+            : Commands.goal(given, {
+                write: field(payload, "write") === true,
+                surface: "mcp",
+              }),
+        )
       }),
   )
   yield* add(

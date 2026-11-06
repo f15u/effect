@@ -31,7 +31,7 @@ describe("every goal walks to finished", () => {
       Effect.gen(function* () {
         const path = graph.path([goal.id], new Set())
         const s = yield* session()
-        const start = yield* s.t("goal", goal.id)
+        const start = yield* s.t("goal", goal.id, "--write")
         assert.strictEqual(start.code, 0, start.out)
         for (const [index, id] of path.entries()) {
           const folder = `step${index}`

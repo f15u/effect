@@ -103,19 +103,30 @@ export const goalPrompt = Effect.gen(function* () {
     .map((item) => ({ id: item.id, label: item.goal! }))
 })
 
-export const goal = (id: string, trusted = false) =>
+export const stateNotice = `The tutor writes ${stateFile} in this folder. It keeps the learner's progress so it survives a closed agent.`
+
+export const goal = (
+  id: string,
+  options: {
+    readonly trusted?: boolean
+    readonly write?: boolean
+    readonly surface?: Surface
+  } = {},
+) =>
   Effect.gen(function* () {
+    const { trusted = false, write = false, surface = "shell" } = options
     const curriculum = yield* Curriculum
     yield* curriculum.validateGoals([id])
     const picked = curriculum.concept(id)
     const progress = yield* Progress
+    const fresh = !(yield* progress.exists)
+    if (fresh && !write)
+      return [
+        stateNotice,
+        `Nothing is written yet. Tell the learner the file name and why. Then repeat: ${surface === "mcp" ? `call tutor_goal with goals ["${id}"] and write true` : `run: tutor goal ${id} --write`}.`,
+      ]
     const known = new Set(Object.keys((yield* progress.read).evidence))
     const path = curriculum.path([id], known)
-    const notice = (yield* progress.exists)
-      ? []
-      : [
-          `The tutor now writes ${stateFile} in this folder. It keeps the learner's progress so it survives a closed agent.`,
-        ]
     yield* progress.update((state) => ({
       ...state,
       phase: trusted ? "Probing" : "ChoosingMode",
@@ -124,7 +135,7 @@ export const goal = (id: string, trusted = false) =>
       trusted,
     }))
     return [
-      ...notice,
+      ...(fresh ? [`The tutor wrote ${stateFile} to keep the progress.`] : []),
       `Goal: ${picked.goal}.`,
       `Path:\n${bullet(path.map((item) => item.title))}`,
     ]
