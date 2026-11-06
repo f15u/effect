@@ -4,9 +4,14 @@ import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
 import * as Path from "effect/Path"
 import type { Concept } from "./Concept.ts"
-import { concepts } from "./concepts/index.ts"
+import { concepts as realConcepts } from "./concepts/index.ts"
 import { buildGraph } from "./CurriculumGraph.ts"
 import { TutorError } from "./TutorError.ts"
+
+export const Concepts = Context.Reference<ReadonlyArray<Concept>>(
+  "tutor/Concepts",
+  { defaultValue: () => realConcepts },
+)
 
 export class Curriculum extends Context.Service<
   Curriculum,
@@ -29,6 +34,7 @@ export class Curriculum extends Context.Service<
   make: Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
+    const concepts = yield* Concepts
     const graph = buildGraph(concepts)
     const byId = new Map<string, Concept>(
       concepts.map((item) => [item.id, item]),

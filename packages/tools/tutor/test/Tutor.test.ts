@@ -1,28 +1,71 @@
 import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
-import * as FileSystem from "effect/FileSystem"
 import { allows, commandNames, machine } from "../src/Machine.ts"
 import type { Phase } from "../src/Progress.ts"
-import * as NodeFs from "node:fs"
-import { concepts } from "../src/concepts/index.ts"
-import { session, TestLayer } from "./Session.ts"
+import { defineConcept, type Concept } from "../src/Concept.ts"
+import {
+  session as openSession,
+  type Content,
+  type Session,
+  type WorldOptions,
+} from "./Harness.ts"
 
-const goalConcepts = concepts.filter((item) => item.goal !== undefined)
+const concept = (
+  id: string,
+  options: { goal?: string; needs?: ReadonlyArray<Concept> } = {},
+) =>
+  defineConcept({
+    dir: `/content/${id}`,
+    id,
+    title: `Title of ${id}`,
+    ...(options.goal === undefined ? {} : { goal: options.goal }),
+    needs: options.needs ?? [],
+    probe: {
+      question: `Question of ${id}?`,
+      correct: `Correct answer of ${id}`,
+      distractors: [
+        { text: `Wrong answer one of ${id}`, belief: `Belief one of ${id}` },
+        { text: `Wrong answer two of ${id}`, belief: `Belief two of ${id}` },
+      ],
+    },
+    keyIdea: `Key idea of ${id}`,
+    hints: [
+      `First hint of ${id}`,
+      `Second hint of ${id}`,
+      `Third hint of ${id}`,
+    ],
+  })
 
-const starter = NodeFs.readFileSync(
-  new URL("../src/concepts/tagged-errors/starter.ts", import.meta.url),
-  "utf8",
-)
+const solo = concept("solo", { goal: "Goal of solo" })
+const base = concept("base")
+const middle = concept("middle", { needs: [base] })
+const top = concept("top", { goal: "Goal of top", needs: [middle] })
+const stubConcepts = [solo, base, middle, top]
 
-const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
-  it.live(
-    name,
-    () =>
-      body.pipe(Effect.scoped, Effect.provide(TestLayer)) as Effect.Effect<
-        A,
-        E
-      >,
-  )
+const starterOf = (id: string) => `// starter ${id}\n`
+const solutionOf = (id: string) => `// SOLVED ${id}\n`
+
+const content: Content = {
+  concepts: stubConcepts,
+  files: Object.fromEntries(
+    stubConcepts.flatMap((item) => [
+      [`${item.dir}/starter.ts`, starterOf(item.id)],
+      [`${item.dir}/solution.ts`, solutionOf(item.id)],
+      [`${item.dir}/goal.test.ts`, ""],
+    ]),
+  ),
+  passes: (source) => source.includes("SOLVED"),
+}
+
+const session = (options: Pick<WorldOptions, "install"> = {}) =>
+  openSession({ ...content, ...options })
+
+const goalConcepts = stubConcepts.filter((item) => item.goal !== undefined)
+
+const starter = starterOf("solo")
+
+const live = <A, E>(name: string, body: Effect.Effect<A, E>) =>
+  it.effect(name, () => body)
 
 describe("status in an empty folder", () => {
   live(
@@ -31,7 +74,7 @@ describe("status in an empty folder", () => {
       const s = yield* session()
       const r = yield* s.t("status")
       assert.strictEqual(r.code, 0)
-      assert.include(r.out, "See every way my code can fail")
+      assert.include(r.out, "Goal of solo")
       assert.include(r.out, "You can now:")
       assert.include(r.out, "tutor goal")
       assert.deepStrictEqual(yield* s.files, [])
@@ -44,7 +87,7 @@ describe("the first write", () => {
     "the first goal call names the state file and why, and writes nothing",
     Effect.gen(function* () {
       const s = yield* session()
-      const r = yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("goal", "solo")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, ".effect-tutor.json")
       assert.match(r.out, /progress/)
@@ -59,8 +102,8 @@ describe("the first write", () => {
     "the repeat with the write flag writes the file",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors")
-      const r = yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo")
+      const r = yield* s.t("goal", "solo", "--write")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
       const again = yield* s.t("status")
@@ -72,7 +115,7 @@ describe("the first write", () => {
     "the notice comes once, not on later writes",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const second = yield* s.t("status")
       assert.notInclude(second.out, "now writes")
     }),
@@ -84,12 +127,10 @@ describe("a goal and its path", () => {
     "a goal built on another concept gives the path in order",
     Effect.gen(function* () {
       const s = yield* session()
-      const r = yield* s.t("goal", "catch-a-defect", "--write")
+      const r = yield* s.t("goal", "top", "--write")
       assert.strictEqual(r.code, 0)
-      const first = r.out.indexOf("Errors that TypeScript can tell apart")
-      const second = r.out.indexOf(
-        "Containing an unexpected failure at a boundary",
-      )
+      const first = r.out.indexOf("Title of base")
+      const second = r.out.indexOf("Title of top")
       assert.isTrue(first >= 0 && second > first, r.out)
     }),
   )
@@ -108,13 +149,13 @@ describe("evidence and the path", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: { "tagged-errors": "Proved" },
+          evidence: { base: "Proved" },
         }),
       )
-      const r = yield* s.t("goal", "catch-a-defect", "--write")
+      const r = yield* s.t("goal", "top", "--write")
       assert.strictEqual(r.code, 0)
-      assert.include(r.out, "Containing an unexpected failure at a boundary")
-      assert.notInclude(r.out, "Errors that TypeScript can tell apart")
+      assert.include(r.out, "Title of top")
+      assert.notInclude(r.out, "Title of base")
     }),
   )
 })
@@ -125,10 +166,7 @@ describe("the menu", () => {
     Effect.gen(function* () {
       const s = yield* session()
       const fresh = yield* s.t("status")
-      assert.include(
-        fresh.out,
-        "Keep a server alive when something unexpected breaks",
-      )
+      assert.include(fresh.out, "Goal of top")
       yield* s.write(
         ".effect-tutor.json",
         JSON.stringify({
@@ -137,12 +175,12 @@ describe("the menu", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: { "catch-a-defect": "Explained" },
+          evidence: { top: "Explained" },
         }),
       )
       const after = yield* s.t("status")
-      assert.include(after.out, "See every way my code can fail")
-      assert.notInclude(after.out, "Keep a server alive")
+      assert.include(after.out, "Goal of solo")
+      assert.notInclude(after.out, "Goal of top")
     }),
   )
 })
@@ -156,8 +194,8 @@ describe("refusals", () => {
       assert.strictEqual(refused.code, 1)
       assert.include(refused.out, "Not now.")
       assert.include(refused.out, "tutor goal")
-      yield* s.t("goal", "tagged-errors", "--write")
-      const again = yield* s.t("goal", "catch-a-defect", "--write")
+      yield* s.t("goal", "solo", "--write")
+      const again = yield* s.t("goal", "top", "--write")
       assert.strictEqual(again.code, 1)
       assert.include(again.out, "Not now.")
       assert.include(again.out, "tutor mode exercise")
@@ -177,42 +215,45 @@ describe("refusals", () => {
 })
 
 describe("the transition table", () => {
-  const reach: Record<
-    Phase,
-    (
-      t: (...args: Array<string>) => Effect.Effect<unknown, any, any>,
-      write: (
-        file: string,
-        content: string,
-      ) => Effect.Effect<unknown, any, any>,
-    ) => Effect.Effect<unknown, any, any>
-  > = {
+  const reach: Record<Phase, (s: Session) => Effect.Effect<unknown>> = {
     Menu: () => Effect.void,
-    Probing: (_, write) =>
-      write(
+    Probing: (s) =>
+      s.write(
         ".effect-tutor.json",
         JSON.stringify({
           phase: "Probing",
-          goal: "tagged-errors",
-          path: ["tagged-errors"],
+          goal: "solo",
+          path: ["solo"],
           exercise: "",
           hints: 0,
           evidence: {},
           trusted: true,
         }),
       ),
-    ChoosingMode: (t) => t("goal", "tagged-errors", "--write"),
-    Working: (t) =>
-      t("goal", "tagged-errors", "--write").pipe(
-        Effect.andThen(t("mode", "exercise", "practice")),
+    ChoosingMode: (s) => s.t("goal", "solo", "--write"),
+    Working: (s) =>
+      s
+        .t("goal", "solo", "--write")
+        .pipe(Effect.andThen(s.t("mode", "exercise", "practice"))),
+    Replaying: (s) =>
+      s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Replaying",
+          goal: "top",
+          path: ["base", "top"],
+          exercise: "",
+          hints: 0,
+          evidence: { base: "Proved" },
+        }),
       ),
-    ProjectWork: (t) =>
-      t("goal", "tagged-errors", "--write").pipe(
-        Effect.andThen(t("mode", "project")),
-      ),
+    ProjectWork: (s) =>
+      s
+        .t("goal", "solo", "--write")
+        .pipe(Effect.andThen(s.t("mode", "project"))),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
-    goal: ["tagged-errors"],
+    goal: ["solo"],
     probe: [],
     mode: ["exercise"],
     check: [],
@@ -227,7 +268,7 @@ describe("the transition table", () => {
       `${phase === "Menu" ? "the first step" : phase === "Replaying" ? "in the replay" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
       Effect.gen(function* () {
         const s = yield* session()
-        yield* reach[phase](s.t, s.write)
+        yield* reach[phase](s)
         for (const name of commandNames.filter((n) => !allows(phase, n))) {
           const r = yield* s.t(name, ...dummy[name]!)
           assert.strictEqual(r.code, 1, name)
@@ -246,7 +287,7 @@ describe("exercise mode", () => {
     "writes nothing until the learner names a folder",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise")
       assert.strictEqual(r.code, 0)
       assert.match(r.out, /folder name/)
@@ -259,7 +300,7 @@ describe("exercise mode", () => {
     "writes the starter, package.json and tsconfig.json in the named folder and says why",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.read("practice/main.ts"), starter)
@@ -279,7 +320,7 @@ describe("exercise mode", () => {
     "never overwrites a file and says it kept it",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       yield* s.t("mode", "exercise", "practice")
       yield* s.write("practice/main.ts", "my work")
       yield* s.write("practice/package.json", '{"name":"mine"}')
@@ -305,7 +346,7 @@ describe("exercise mode", () => {
         "package.json",
         JSON.stringify({ dependencies: { effect: "^4.0.0" } }),
       )
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise", "sub/practice", "--install")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.read("sub/practice/main.ts"), starter)
@@ -328,7 +369,7 @@ describe("exercise mode", () => {
         "practice/package.json",
         JSON.stringify({ devDependencies: { effect: "^4.0.0" } }),
       )
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise", "practice", "--install")
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.nested("practice"), [
@@ -343,7 +384,7 @@ describe("exercise mode", () => {
     "installs effect and typescript only when the yes flag is passed, and says so",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const no = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(yield* s.installs, "")
       assert.match(no.out, /--install/)
@@ -361,7 +402,7 @@ describe("exercise mode", () => {
     "refuses a folder outside the current folder and writes nothing",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise", "../escape")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "relative path")
@@ -374,8 +415,8 @@ describe("a missing npm", () => {
   live(
     "refuses the install with a clear message and does not crash",
     Effect.gen(function* () {
-      const s = yield* session({ npm: false })
-      yield* s.t("goal", "tagged-errors", "--write")
+      const s = yield* session({ install: "missing" })
+      yield* s.t("goal", "solo", "--write")
       const r = yield* s.t("mode", "exercise", "practice", "--install")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "npm")
@@ -385,26 +426,13 @@ describe("a missing npm", () => {
   )
 })
 
-const solution = NodeFs.readFileSync(
-  new URL("../src/concepts/tagged-errors/solution.ts", import.meta.url),
-  "utf8",
-)
+const solution = solutionOf("solo")
 
-const middle = {
-  "typed-failure": "Proved",
-  "stop-on-broken-rule": "Proved",
-} as const
+const baseSolution = solutionOf("base")
 
-const revisiting = {
-  "tagged-errors": "Proved",
-  "typed-failure": "Proved",
-  "stop-on-broken-rule": "Explained",
-} as const
+const partial = { middle: "Proved" } as const
 
-const stopSolution = NodeFs.readFileSync(
-  new URL("../src/concepts/stop-on-broken-rule/solution.ts", import.meta.url),
-  "utf8",
-)
+const revisiting = { base: "Proved", middle: "Explained" } as const
 
 const seeded = Effect.gen(function* () {
   const s = yield* session()
@@ -416,15 +444,15 @@ const seeded = Effect.gen(function* () {
       path: [],
       exercise: "",
       hints: 0,
-      evidence: middle,
+      evidence: partial,
     }),
   )
-  yield* s.t("goal", "catch-a-defect", "--write")
+  yield* s.t("goal", "top", "--write")
   yield* s.t("mode", "exercise", "practice")
   return s
 })
 
-const working = (goal = "tagged-errors") =>
+const working = (goal = "solo") =>
   Effect.gen(function* () {
     const s = yield* session()
     yield* s.t("goal", goal, "--write")
@@ -445,25 +473,22 @@ describe("check", () => {
   live(
     "a passing check records proved and moves to the next concept",
     Effect.gen(function* () {
-      const s = yield* working("catch-a-defect")
-      yield* s.write("practice/main.ts", solution)
+      const s = yield* working("top")
+      yield* s.write("practice/main.ts", baseSolution)
       const r = yield* s.t("check")
       assert.strictEqual(r.code, 0, r.out)
       assert.include(r.out, "PASSED")
       assert.include(r.out, "tutor replay")
       assert.notInclude(r.out, "tutor check")
-      assert.include(
-        yield* s.read(".effect-tutor.json"),
-        '"tagged-errors":"Proved"',
-      )
+      assert.include(yield* s.read(".effect-tutor.json"), '"base":"Proved"')
     }),
   )
 
   live(
     "a passing check that leaves more concepts offers the replay",
     Effect.gen(function* () {
-      const s = yield* working("catch-a-defect")
-      yield* s.write("practice/main.ts", solution)
+      const s = yield* working("top")
+      yield* s.write("practice/main.ts", baseSolution)
       const r = yield* s.t("check")
       assert.strictEqual(r.code, 0, r.out)
       assert.include(r.out, "tutor replay answered")
@@ -476,16 +501,13 @@ describe("check", () => {
     "a skipped replay moves on to the next concept",
     Effect.gen(function* () {
       const s = yield* seeded
-      yield* s.write("practice/main.ts", solution)
+      yield* s.write("practice/main.ts", baseSolution)
       yield* s.t("check")
       const r = yield* s.t("replay", "skipped")
       assert.strictEqual(r.code, 0, r.out)
       assert.include(r.out, "tutor mode project")
       assert.notInclude(r.out, "tutor replay")
-      assert.include(
-        yield* s.read(".effect-tutor.json"),
-        '"path":["catch-a-defect"]',
-      )
+      assert.include(yield* s.read(".effect-tutor.json"), '"path":["top"]')
     }),
   )
 
@@ -508,8 +530,8 @@ describe("check", () => {
       const r = yield* s.t("check")
       assert.include(r.out, "The goal is reached")
       assert.notInclude(r.out, "tutor replay")
-      assert.notInclude(r.out, "tagged-errors:")
-      assert.include(r.out, "catch-a-defect:")
+      assert.notInclude(r.out, "solo:")
+      assert.include(r.out, "top:")
       assert.include(r.out, "tutor goal")
     }),
   )
@@ -529,7 +551,7 @@ describe("check", () => {
           evidence: revisiting,
         }),
       )
-      yield* s.t("goal", "catch-a-defect", "--write")
+      yield* s.t("goal", "top", "--write")
       yield* s.t("mode", "exercise", "practice")
       const starterText = yield* s.read("practice/main.ts")
       const untouched = yield* s.t("check")
@@ -540,10 +562,7 @@ describe("check", () => {
       assert.include(r.out, "REVISIT")
       assert.include(r.out, "tutor mode project")
       const state = JSON.parse(yield* s.read(".effect-tutor.json"))
-      assert.deepStrictEqual(state.path, [
-        "stop-on-broken-rule",
-        "catch-a-defect",
-      ])
+      assert.deepStrictEqual(state.path, ["middle", "top"])
       assert.strictEqual(state.phase, "ChoosingMode")
       assert.deepStrictEqual(state.evidence, revisiting)
     }),
@@ -564,32 +583,18 @@ describe("check", () => {
           evidence: revisiting,
         }),
       )
-      yield* s.t("goal", "catch-a-defect", "--write")
+      yield* s.t("goal", "top", "--write")
       yield* s.t("mode", "exercise", "practice")
       yield* s.write("practice/main.ts", "export {}\n")
       yield* s.t("check")
       const back = yield* s.t("mode", "exercise", "again")
       assert.strictEqual(back.code, 0, back.out)
-      yield* s.write("again/main.ts", stopSolution)
+      yield* s.write("again/main.ts", solutionOf("middle"))
       const passed = yield* s.t("check")
       assert.include(passed.out, "tutor replay")
       const next = yield* s.t("replay", "answered")
       assert.include(next.out, "tutor mode project")
-      assert.include(
-        yield* s.read(".effect-tutor.json"),
-        '"path":["catch-a-defect"]',
-      )
-    }),
-  )
-
-  live(
-    "a check leaves no scratch folder inside the package",
-    Effect.gen(function* () {
-      const s = yield* working()
-      yield* s.write("practice/main.ts", solution)
-      const r = yield* s.t("check")
-      assert.include(r.out, "PASSED")
-      assert.isFalse(NodeFs.existsSync(new URL("../.tmp", import.meta.url)))
+      assert.include(yield* s.read(".effect-tutor.json"), '"path":["top"]')
     }),
   )
 
@@ -610,8 +615,7 @@ describe("check", () => {
     "a check with no exercise file is refused and says where the file belongs",
     Effect.gen(function* () {
       const s = yield* working()
-      const fs = yield* FileSystem.FileSystem
-      yield* fs.remove(`${s.dir}/practice/main.ts`)
+      yield* s.remove("practice/main.ts")
       const r = yield* s.t("check")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "practice/main.ts")
@@ -620,9 +624,9 @@ describe("check", () => {
 })
 
 const hints = [
-  "Compare what the three classes extend. What does Data.TaggedError add that Error does not?",
-  'Import Data from "effect". Replace `extends Error` with `extends Data.TaggedError("<tag>")`. The call takes the tag as a string.',
-  'The tag equals the class name, for example `class NetworkError extends Data.TaggedError("NetworkError") {}`. Do the same for the other two classes.',
+  "First hint of solo",
+  "Second hint of solo",
+  "Third hint of solo",
 ]
 
 describe("hints and the solution", () => {
@@ -636,7 +640,7 @@ describe("hints and the solution", () => {
       assert.notInclude(first.out, hints[1])
       const locked = yield* s.t("solution")
       assert.strictEqual(locked.code, 1)
-      assert.notInclude(locked.out, "Data.TaggedError(")
+      assert.notInclude(locked.out, "SOLVED")
       assert.include(locked.out, "tutor hint")
       const second = yield* s.t("hint")
       assert.include(second.out, hints[1])
@@ -645,7 +649,7 @@ describe("hints and the solution", () => {
       assert.include(none.out, "No more hints")
       const open = yield* s.t("solution")
       assert.strictEqual(open.code, 0)
-      assert.include(open.out, 'extends Data.TaggedError("ExpiredCardError")')
+      assert.include(open.out, "SOLVED solo")
     }),
   )
 
@@ -655,7 +659,7 @@ describe("hints and the solution", () => {
       const s = yield* working()
       const r = yield* s.t("solution", "--said", "just show me")
       assert.strictEqual(r.code, 0)
-      assert.include(r.out, 'extends Data.TaggedError("NetworkError")')
+      assert.include(r.out, "SOLVED solo")
     }),
   )
 
@@ -709,7 +713,7 @@ describe("a way out of project work", () => {
     "the learner can switch to an exercise",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       yield* s.t("mode", "project")
       const r = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(r.code, 0, r.out)
@@ -730,8 +734,8 @@ describe("a resumed trusted session", () => {
         ".effect-tutor.json",
         seedState({
           phase: "Probing",
-          goal: "tagged-errors",
-          path: ["tagged-errors"],
+          goal: "solo",
+          path: ["base"],
           trusted: true,
         }),
       )
@@ -755,29 +759,29 @@ describe("revisit", () => {
         ".effect-tutor.json",
         seedState({
           evidence: {
-            "tagged-errors": "Explained",
-            "typed-failure": "Proved",
-            "stop-on-broken-rule": "Proved",
+            base: "Explained",
+            solo: "Proved",
+            middle: "Proved",
           },
         }),
       )
-      yield* s.t("goal", "catch-a-defect", "--write")
+      yield* s.t("goal", "top", "--write")
       yield* s.t("mode", "exercise", "practice")
       const starterText = yield* s.read("practice/main.ts")
       yield* s.write("practice/main.ts", `${starterText}\n// tried\n`)
       const r = yield* s.t("check")
       assert.include(r.out, "REVISIT")
       const state = JSON.parse(yield* s.read(".effect-tutor.json"))
-      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+      assert.deepStrictEqual(state.path, ["base", "top"])
     }),
   )
 })
 
 describe("confirm on a project file", () => {
-  const project = (setup: (s: any) => Effect.Effect<unknown, any, any>) =>
+  const project = (setup: (s: Session) => Effect.Effect<unknown>) =>
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       yield* s.t("mode", "project")
       yield* setup(s)
       return s
@@ -798,11 +802,8 @@ describe("confirm on a project file", () => {
   live(
     "accepts a file outside the project folder",
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const other = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-out-" })
-      const file = `${other}/app.ts`
-      yield* fs.writeFileString(file, "export const rows = 1\n")
-      const s = yield* project(() => Effect.void)
+      const file = "/elsewhere/app.ts"
+      const s = yield* project((p) => p.write(file, "export const rows = 1\n"))
       const r = yield* s.t("confirm", file, "--quote", "export const rows = 1")
       assert.strictEqual(r.code, 0, r.out)
     }),
@@ -853,7 +854,7 @@ describe("a bad argument", () => {
     "a mode or replay value outside the choices is refused",
     Effect.gen(function* () {
       const s = yield* session()
-      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("goal", "solo", "--write")
       const mode = yield* s.t("mode", "sideways")
       assert.strictEqual(mode.code, 1)
     }),

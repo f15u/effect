@@ -1,35 +1,83 @@
 import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
+import type * as Scope from "effect/Scope"
 import { commandNames } from "../src/Machine.ts"
-import * as NodeFs from "node:fs"
-import { taggedErrors } from "../src/concepts/tagged-errors/concept.ts"
-import { catchADefect } from "../src/concepts/catch-a-defect/concept.ts"
 import { nothingForNow } from "../src/Commands.ts"
-import { concepts } from "../src/concepts/index.ts"
 import { notSure, probeOptions } from "../src/Concept.ts"
+import { defineConcept, type Concept } from "../src/Concept.ts"
+import type { Content } from "./Harness.ts"
 import {
-  mcpSession,
-  TestLayer,
+  mcpSession as openMcpSession,
+  type McpOptions,
   type ElicitAnswer,
   type ElicitRequest,
-} from "./Session.ts"
+} from "./McpHarness.ts"
+
+const concept = (
+  id: string,
+  options: { goal?: string; needs?: ReadonlyArray<Concept> } = {},
+) =>
+  defineConcept({
+    dir: `/content/${id}`,
+    id,
+    title: `Title of ${id}`,
+    ...(options.goal === undefined ? {} : { goal: options.goal }),
+    needs: options.needs ?? [],
+    probe: {
+      question: `Question of ${id}?`,
+      correct: `Correct answer of ${id}`,
+      distractors: [
+        { text: `Wrong answer one of ${id}`, belief: `Belief one of ${id}` },
+        { text: `Wrong answer two of ${id}`, belief: `Belief two of ${id}` },
+      ],
+    },
+    keyIdea: `Key idea of ${id}`,
+    hints: [
+      `First hint of ${id}`,
+      `Second hint of ${id}`,
+      `Third hint of ${id}`,
+    ],
+  })
+
+const solo = concept("solo", { goal: "Goal of solo" })
+const base = concept("base")
+const middle = concept("middle", { needs: [base] })
+const top = concept("top", { goal: "Goal of top", needs: [middle] })
+const stubConcepts = [solo, base, middle, top]
+
+const starterOf = (id: string) => `// starter ${id}\n`
+const solutionOf = (id: string) => `// SOLVED ${id}\n`
+
+const content: Content = {
+  concepts: stubConcepts,
+  files: Object.fromEntries(
+    stubConcepts.flatMap((item) => [
+      [`${item.dir}/starter.ts`, starterOf(item.id)],
+      [`${item.dir}/solution.ts`, solutionOf(item.id)],
+      [`${item.dir}/goal.test.ts`, ""],
+    ]),
+  ),
+  passes: (source) => source.includes("SOLVED"),
+}
+
+const mcpSession = (options: McpOptions = {}) =>
+  openMcpSession({ ...content, ...options })
 
 const canAsk = { elicitation: { form: {} } }
 
-const solution = NodeFs.readFileSync(
-  new URL("../src/concepts/tagged-errors/solution.ts", import.meta.url),
-  "utf8",
-)
+const unsure =
+  (rest: (request: ElicitRequest) => ElicitAnswer) =>
+  (request: ElicitRequest): ElicitAnswer =>
+    request.properties.choice === undefined
+      ? rest(request)
+      : choices(request).includes(nothingForNow)
+        ? pick(solo.goal!)
+        : pick(notSure)
 
-const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
-  it.live(
-    name,
-    () =>
-      body.pipe(Effect.scoped, Effect.provide(TestLayer)) as Effect.Effect<
-        A,
-        E
-      >,
-  )
+const solution = solutionOf("solo")
+
+const live = <A, E>(name: string, body: Effect.Effect<A, E, Scope.Scope>) =>
+  it.live(name, () => Effect.scoped(body))
 
 describe("tutor mcp", () => {
   live(
@@ -46,7 +94,7 @@ describe("tutor mcp", () => {
     "the first 512 characters of the instructions hold the key rules",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      const head = (s.init.result.instructions as string).slice(0, 512)
+      const head = s.init.instructions.slice(0, 512)
       assert.include(head, "Never show the learner the")
       assert.include(head, "plain chat message")
       assert.include(head, "Never judge or invent the learner's answer")
@@ -74,12 +122,12 @@ describe("tutor mcp", () => {
     "the first goal call names the state file and writes nothing; the repeat writes",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      const first = yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const first = yield* s.tool("tutor_goal", { goals: ["solo"] })
       assert.isFalse(first.isError)
       assert.include(first.out, ".effect-tutor.json")
       assert.include(first.out, "write")
       assert.deepStrictEqual(yield* s.files, [])
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
     }),
   )
@@ -91,13 +139,13 @@ describe("tutor mcp", () => {
         capabilities: canAsk,
         answer: (request) =>
           request.message.includes(".effect-tutor.json")
-            ? pick(catchADefect.goal!)
+            ? pick(top.goal!)
             : { action: "decline" },
       })
       const goal = yield* s.tool("tutor_goal")
       assert.isFalse(goal.isError)
       assert.include(s.asked[0]!.message, ".effect-tutor.json")
-      assert.strictEqual((yield* s.state).goal, "catch-a-defect")
+      assert.strictEqual((yield* s.state).goal, "top")
     }),
   )
 
@@ -106,7 +154,7 @@ describe("tutor mcp", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession()
       const goal = yield* s.tool("tutor_goal", {
-        goals: ["tagged-errors"],
+        goals: ["solo"],
         write: true,
       })
       assert.include(goal.out, ".effect-tutor.json")
@@ -137,12 +185,12 @@ describe("tutor mcp", () => {
             ? { action: "accept", content: { folder: "practice" } }
             : { action: "accept", content: { install: false } },
       })
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_probe")
       const done = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.isFalse(done.isError)
-      const form = s.asked[0]!
-      assert.isUndefined(form.properties.folder.default)
+      const form = s.asked.find((item) => item.properties.folder !== undefined)!
+      assert.isUndefined(form.properties.folder?.default)
       for (const file of ["main.ts", "package.json", "tsconfig.json"])
         assert.include(form.message, file)
       assert.deepStrictEqual(yield* s.nested("practice"), [
@@ -165,12 +213,12 @@ describe("tutor mcp", () => {
               : { action: "accept", content: { install: yes } },
         })
       const no = yield* reply(false)
-      yield* no.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* no.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* no.tool("tutor_probe")
       yield* no.tool("tutor_mode", { mode: "exercise", install: true })
       assert.strictEqual(yield* no.installs, "")
       const yes = yield* reply(true)
-      yield* yes.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* yes.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* yes.tool("tutor_probe")
       yield* yes.tool("tutor_mode", { mode: "exercise" })
       assert.include(yield* yes.installs, "install effect typescript")
@@ -184,7 +232,7 @@ describe("tutor mcp", () => {
         capabilities: { elicitation: {} },
         answer: () => ({ action: "decline" }),
       })
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_probe")
       const out = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.isTrue(out.isError)
@@ -196,16 +244,16 @@ describe("tutor mcp", () => {
     "without elicitation nothing is written until the agent passes a name, and the tool says what it writes",
     Effect.gen(function* () {
       const s = yield* mcpSession()
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_probe")
       const ask = yield* s.tool("tutor_mode", { mode: "exercise" })
       assert.include(ask.out, "folder name")
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
       assert.deepStrictEqual(s.asked, [])
       const list = yield* s.rawTools
-      const mode = list.find((item: any) => item.name === "tutor_mode")
+      const mode = list.find((item) => item.name === "tutor_mode")!
       for (const file of ["main.ts", "package.json", "tsconfig.json"])
-        assert.include(mode.description, file)
+        assert.include(mode.description ?? "", file)
       yield* s.tool("tutor_mode", { mode: "exercise", folder: "practice" })
       assert.strictEqual(yield* s.installs, "")
       assert.deepStrictEqual(yield* s.nested("practice"), [
@@ -223,20 +271,20 @@ describe("tutor mcp trusted channel", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession({
         capabilities: canAsk,
-        answer: () => ({ action: "accept", choice: catchADefect.goal! }),
+        answer: () => pick(top.goal!),
       })
       const goal = yield* s.tool("tutor_goal", {
-        goals: ["tagged-errors"],
+        goals: ["solo"],
         write: true,
       })
       const state = yield* s.state
-      assert.strictEqual(state.goal, "catch-a-defect")
+      assert.strictEqual(state.goal, "top")
       assert.strictEqual(state.trusted, true)
-      assert.include(goal.out, catchADefect.goal!)
+      assert.include(goal.out, top.goal!)
       assert.sameMembers(
         [...choices(s.asked[0]!)],
         [
-          ...concepts.flatMap((item) => (item.goal ? [item.goal] : [])),
+          ...stubConcepts.flatMap((item) => (item.goal ? [item.goal] : [])),
           nothingForNow,
         ],
       )
@@ -275,7 +323,7 @@ describe("tutor mcp trusted channel", () => {
           exercise: "",
           hints: 0,
           evidence: Object.fromEntries(
-            concepts.map((item) => [item.id, "Proved"]),
+            stubConcepts.map((item) => [item.id, "Proved"]),
           ),
         }),
       )
@@ -291,7 +339,7 @@ describe("tutor mcp trusted channel", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession()
       const goal = yield* s.tool("tutor_goal", {
-        goals: ["tagged-errors"],
+        goals: ["solo"],
         write: true,
       })
       assert.isFalse(goal.isError)
@@ -319,29 +367,32 @@ const pick = (choice: string, words?: string): ElicitAnswer => ({
   ...(words === undefined ? {} : { words }),
 })
 
+const choices = (request: ElicitRequest): ReadonlyArray<string> =>
+  request.properties.choice?.enum ?? []
+
 describe("tutor mcp probe", () => {
   live(
     "a correct pick records explained and skips the concept; the text is not evidence",
     Effect.gen(function* () {
       const s = yield* mcpSession({
         capabilities: canAsk,
-        answer: learner(taggedErrors.goal!, () =>
-          pick(taggedErrors.probe.correct, "I know all of Effect"),
+        answer: learner(solo.goal!, () =>
+          pick(solo.probe.correct, "I know all of Effect"),
         ),
       })
       const goal = yield* s.tool("tutor_goal")
       assert.include(goal.out, "tutor_probe")
-      assert.notInclude(goal.out, taggedErrors.probe.correct)
+      assert.notInclude(goal.out, solo.probe.correct)
       assert.strictEqual((yield* s.state).phase, "Probing")
       const probe = yield* s.tool("tutor_probe")
       assert.isFalse(probe.isError)
       const request = s.asked[1]!
-      assert.include(request.message, taggedErrors.probe.question)
-      assert.sameMembers([...request.options], [...probeOptions(taggedErrors)])
-      assert.strictEqual(request.options.at(-1), notSure)
-      assert.sameMembers([...request.fields], ["choice", "words"])
+      assert.include(request.message, solo.probe.question)
+      assert.sameMembers([...choices(request)], [...probeOptions(solo)])
+      assert.strictEqual(choices(request).at(-1), notSure)
+      assert.sameMembers(Object.keys(request.properties), ["choice", "words"])
       const state = yield* s.state
-      assert.deepStrictEqual(state.evidence, { "tagged-errors": "Explained" })
+      assert.deepStrictEqual(state.evidence, { solo: "Explained" })
       assert.strictEqual(state.phase, "Menu")
       assert.include(probe.out, "I know all of Effect")
     }),
@@ -350,15 +401,15 @@ describe("tutor mcp probe", () => {
   live(
     "a wrong pick, not sure, or a declined form leads into the concept with no evidence",
     Effect.gen(function* () {
-      const wrong = taggedErrors.probe.distractors[0]!
+      const wrong = solo.probe.distractors[0]!
       for (const answer of [
-        pick(wrong.text, taggedErrors.probe.correct),
+        pick(wrong.text, solo.probe.correct),
         pick(notSure),
         { action: "decline" } as ElicitAnswer,
       ]) {
         const s = yield* mcpSession({
           capabilities: canAsk,
-          answer: learner(taggedErrors.goal!, () => answer),
+          answer: learner(solo.goal!, () => answer),
         })
         yield* s.tool("tutor_goal")
         const probe = yield* s.tool("tutor_probe")
@@ -377,17 +428,47 @@ describe("tutor mcp probe", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession({
         capabilities: canAsk,
-        answer: learner(taggedErrors.goal!, () => pick(notSure)),
+        answer: learner(solo.goal!, () => pick(notSure)),
       })
       yield* s.tool("tutor_goal")
       yield* s.tool("tutor_probe", {
-        choice: taggedErrors.probe.correct,
-        answer: taggedErrors.probe.correct,
-        words: taggedErrors.probe.correct,
+        choice: solo.probe.correct,
+        answer: solo.probe.correct,
+        words: solo.probe.correct,
       })
       assert.deepStrictEqual((yield* s.state).evidence, {})
       const listed = yield* s.tools
       assert.include(listed, "tutor_probe")
+    }),
+  )
+})
+
+describe("tutor mcp replay", () => {
+  live(
+    "an answered replay on a trusted session goes to the next probe",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({ capabilities: canAsk })
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Replaying",
+          goal: "top",
+          path: ["solo", "top"],
+          exercise: "",
+          hints: 0,
+          evidence: { solo: "Proved" },
+          trusted: true,
+        }),
+      )
+      assert.include(yield* s.tools, "tutor_replay")
+      const bad = yield* s.tool("tutor_replay", { how: "later" })
+      assert.isTrue(bad.isError)
+      const r = yield* s.tool("tutor_replay", { how: "answered" })
+      assert.isFalse(r.isError)
+      assert.include(r.out, "tutor_probe")
+      const state = yield* s.state
+      assert.strictEqual(state.phase, "Probing")
+      assert.deepStrictEqual(state.path, ["top"])
     }),
   )
 })
@@ -400,7 +481,7 @@ const owner =
     request.properties.choice === undefined
       ? reply
       : choices(request).includes(nothingForNow)
-        ? pick(taggedErrors.goal!)
+        ? pick(solo.goal!)
         : pick(notSure)
 
 describe("tutor mcp project work", () => {
@@ -445,7 +526,7 @@ describe("tutor mcp project work", () => {
       assert.include(form.message, "export const rows = 1")
       assert.include(form.message, "Is this your code?")
       assert.deepStrictEqual((yield* s.state).evidence, {
-        "tagged-errors": "Explained",
+        solo: "Explained",
       })
     }),
   )
@@ -459,7 +540,7 @@ describe("tutor mcp project work", () => {
           request.properties.confirmed
             ? yes
             : choices(request).includes(nothingForNow)
-              ? pick(catchADefect.goal!)
+              ? pick(top.goal!)
               : pick(notSure),
       })
       yield* s.write("db.ts", "export const rows = 1\n")
@@ -471,10 +552,7 @@ describe("tutor mcp project work", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: {
-            "typed-failure": "Proved",
-            "stop-on-broken-rule": "Proved",
-          },
+          evidence: { middle: "Proved" },
         }),
       )
       yield* s.tool("tutor_goal")
@@ -487,7 +565,7 @@ describe("tutor mcp project work", () => {
       assert.include(r.out, "tutor_replay")
       const state = yield* s.state
       assert.strictEqual(state.phase, "Replaying")
-      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+      assert.deepStrictEqual(state.path, ["base", "top"])
       yield* s.tool("tutor_replay", { how: "skipped" })
       yield* s.tool("tutor_probe")
       yield* s.tool("tutor_mode", { mode: "project" })
@@ -524,7 +602,7 @@ describe("tutor mcp project work", () => {
         assert.include(r.out, "tutor_confirm")
         const state = yield* s.state
         assert.deepStrictEqual(state.evidence, {})
-        assert.deepStrictEqual(state.path, ["tagged-errors"])
+        assert.deepStrictEqual(state.path, ["solo"])
       }
     }),
   )
@@ -534,7 +612,7 @@ describe("tutor mcp project work", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession()
       yield* s.write("db.ts", "export const rows = 1\n")
-      yield* s.tool("tutor_goal", { goals: ["tagged-errors"], write: true })
+      yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_mode", { mode: "project" })
       const r = yield* s.tool("tutor_confirm", {
         file: "db.ts",
@@ -582,8 +660,8 @@ describe("tutor mcp review fixes", () => {
         ".effect-tutor.json",
         JSON.stringify({
           phase: "Probing",
-          goal: "tagged-errors",
-          path: ["tagged-errors"],
+          goal: "solo",
+          path: ["solo"],
           exercise: "",
           hints: 0,
           evidence: {},
@@ -606,11 +684,11 @@ describe("tutor mcp review fixes", () => {
         ".effect-tutor.json",
         JSON.stringify({
           phase: "ProjectWork",
-          goal: "tagged-errors",
-          path: ["tagged-errors"],
+          goal: "solo",
+          path: ["solo"],
           exercise: "",
           hints: 0,
-          evidence: { "tagged-errors": "Proved" },
+          evidence: { solo: "Proved" },
         }),
       )
       yield* s.tool("tutor_confirm", {
@@ -618,7 +696,7 @@ describe("tutor mcp review fixes", () => {
         quote: "export const rows = 1",
       })
       assert.deepStrictEqual((yield* s.state).evidence, {
-        "tagged-errors": "Proved",
+        solo: "Proved",
       })
     }),
   )
@@ -634,7 +712,7 @@ describe("tutor mcp review fixes", () => {
             : request.properties.install
               ? { action: "accept", content: { install: false } }
               : choices(request).includes(nothingForNow)
-                ? pick(taggedErrors.goal!)
+                ? pick(solo.goal!)
                 : pick(notSure),
       })
       yield* s.tool("tutor_goal")

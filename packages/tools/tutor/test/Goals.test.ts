@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import * as NodeFs from "node:fs"
 import { concepts } from "../src/concepts/index.ts"
+import { Curriculum } from "../src/Curriculum.ts"
 import { buildGraph } from "../src/CurriculumGraph.ts"
 import { session, TestLayer } from "./Session.ts"
 
@@ -54,4 +55,16 @@ describe("every goal walks to finished", () => {
       }),
     )
   }
+})
+
+describe("the curriculum", () => {
+  live(
+    "a goal that does not exist is refused, and every real goal is accepted",
+    Effect.gen(function* () {
+      const curriculum = yield* Curriculum
+      const error = yield* curriculum.validateGoals(["nope"]).pipe(Effect.flip)
+      assert.strictEqual(error.reason, "UnknownGoal")
+      yield* curriculum.validateGoals(goals.map((item) => item.id))
+    }).pipe(Effect.provide(Curriculum.layer)),
+  )
 })
