@@ -369,6 +369,40 @@ const solution = NodeFs.readFileSync(
   "utf8",
 )
 
+const middle = {
+  "typed-failure": "Proved",
+  "stop-on-broken-rule": "Proved",
+} as const
+
+const revisiting = {
+  "tagged-errors": "Proved",
+  "typed-failure": "Proved",
+  "stop-on-broken-rule": "Explained",
+} as const
+
+const stopSolution = NodeFs.readFileSync(
+  new URL("../src/concepts/stop-on-broken-rule/solution.ts", import.meta.url),
+  "utf8",
+)
+
+const seeded = Effect.gen(function* () {
+  const s = yield* session()
+  yield* s.write(
+    ".effect-tutor.json",
+    JSON.stringify({
+      phase: "Menu",
+      goal: "",
+      path: [],
+      exercise: "",
+      hints: 0,
+      evidence: middle,
+    }),
+  )
+  yield* s.t("goal", "catch-a-defect")
+  yield* s.t("mode", "exercise", "practice")
+  return s
+})
+
 const working = (goal = "tagged-errors") =>
   Effect.gen(function* () {
     const s = yield* session()
@@ -420,7 +454,7 @@ describe("check", () => {
   live(
     "a skipped replay moves on to the next concept",
     Effect.gen(function* () {
-      const s = yield* working("catch-a-defect")
+      const s = yield* seeded
       yield* s.write("practice/main.ts", solution)
       yield* s.t("check")
       const r = yield* s.t("replay", "skipped")
@@ -471,7 +505,7 @@ describe("check", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: { "tagged-errors": "Explained" },
+          evidence: revisiting,
         }),
       )
       yield* s.t("goal", "catch-a-defect")
@@ -485,9 +519,12 @@ describe("check", () => {
       assert.include(r.out, "REVISIT")
       assert.include(r.out, "tutor mode project")
       const state = JSON.parse(yield* s.read(".effect-tutor.json"))
-      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+      assert.deepStrictEqual(state.path, [
+        "stop-on-broken-rule",
+        "catch-a-defect",
+      ])
       assert.strictEqual(state.phase, "ChoosingMode")
-      assert.deepStrictEqual(state.evidence, { "tagged-errors": "Explained" })
+      assert.deepStrictEqual(state.evidence, revisiting)
     }),
   )
 
@@ -503,7 +540,7 @@ describe("check", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: { "tagged-errors": "Explained" },
+          evidence: revisiting,
         }),
       )
       yield* s.t("goal", "catch-a-defect")
@@ -512,7 +549,7 @@ describe("check", () => {
       yield* s.t("check")
       const back = yield* s.t("mode", "exercise", "again")
       assert.strictEqual(back.code, 0, back.out)
-      yield* s.write("again/main.ts", solution)
+      yield* s.write("again/main.ts", stopSolution)
       const passed = yield* s.t("check")
       assert.include(passed.out, "tutor replay")
       const next = yield* s.t("replay", "answered")

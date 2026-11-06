@@ -1,12 +1,12 @@
 import { defineConcept } from "../../Concept.ts"
-import { taggedErrors } from "../tagged-errors/concept.ts"
+import { stopOnBrokenRule } from "../stop-on-broken-rule/concept.ts"
 
 export const catchADefect = defineConcept({
   dir: import.meta.dirname,
   id: "catch-a-defect",
   title: "Containing an unexpected failure at a boundary",
   goal: "Keep a server alive when something unexpected breaks",
-  needs: [taggedErrors],
+  needs: [stopOnBrokenRule],
   probe: {
     question:
       "A payment is captured twice by mistake. This is a bug, not a normal failure. What should happen with it?",

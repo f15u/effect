@@ -5,6 +5,7 @@ import * as NodeFs from "node:fs"
 import { taggedErrors } from "../src/concepts/tagged-errors/concept.ts"
 import { catchADefect } from "../src/concepts/catch-a-defect/concept.ts"
 import { nothingForNow } from "../src/Commands.ts"
+import { concepts } from "../src/concepts/index.ts"
 import { notSure, probeOptions } from "../src/Concept.ts"
 import {
   mcpSession,
@@ -191,8 +192,11 @@ describe("tutor mcp trusted channel", () => {
       assert.strictEqual(state.trusted, true)
       assert.include(goal.out, catchADefect.goal!)
       assert.sameMembers(
-        [...s.asked[0]!.options],
-        [taggedErrors.goal!, catchADefect.goal!, nothingForNow],
+        [...choices(s.asked[0]!)],
+        [
+          ...concepts.flatMap((item) => (item.goal ? [item.goal] : [])),
+          nothingForNow,
+        ],
       )
       assert.strictEqual(s.asked[0]!.options.at(-1), nothingForNow)
     }),
@@ -228,10 +232,9 @@ describe("tutor mcp trusted channel", () => {
           path: [],
           exercise: "",
           hints: 0,
-          evidence: {
-            "tagged-errors": "Explained",
-            "catch-a-defect": "Proved",
-          },
+          evidence: Object.fromEntries(
+            concepts.map((item) => [item.id, "Proved"]),
+          ),
         }),
       )
       const goal = yield* s.tool("tutor_goal")
@@ -399,6 +402,56 @@ describe("tutor mcp project work", () => {
       assert.deepStrictEqual((yield* s.state).evidence, {
         "tagged-errors": "Explained",
       })
+    }),
+  )
+
+  live(
+    "a yes with concepts left offers the replay; on the last concept it finishes the goal",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({
+        capabilities: canAsk,
+        answer: (request) =>
+          request.properties.confirmed
+            ? yes
+            : choices(request).includes(nothingForNow)
+              ? pick(catchADefect.goal!)
+              : pick(notSure),
+      })
+      yield* s.write("db.ts", "export const rows = 1\n")
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Menu",
+          goal: "",
+          path: [],
+          exercise: "",
+          hints: 0,
+          evidence: {
+            "typed-failure": "Proved",
+            "stop-on-broken-rule": "Proved",
+          },
+        }),
+      )
+      yield* s.tool("tutor_goal")
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "project" })
+      const r = yield* s.tool("tutor_confirm", {
+        file: "db.ts",
+        quote: "export const rows = 1",
+      })
+      assert.include(r.out, "tutor_replay")
+      const state = yield* s.state
+      assert.strictEqual(state.phase, "Replaying")
+      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+      yield* s.tool("tutor_replay", { how: "skipped" })
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "project" })
+      const last = yield* s.tool("tutor_confirm", {
+        file: "db.ts",
+        quote: "export const rows = 1",
+      })
+      assert.include(last.out, "The goal is reached")
+      assert.notInclude(last.out, "tutor_replay")
     }),
   )
 
