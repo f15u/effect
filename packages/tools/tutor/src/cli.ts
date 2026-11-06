@@ -10,10 +10,12 @@ import * as Layer from "effect/Layer"
 import * as Argument from "effect/cli/Argument"
 import * as CliConfig from "effect/cli/CliConfig"
 import * as Command from "effect/cli/Command"
+import * as Flag from "effect/cli/Flag"
 import * as GlobalFlag from "effect/cli/GlobalFlag"
 import * as Commands from "./Commands.ts"
 import type { TutorError } from "./TutorError.ts"
 import { Curriculum } from "./Curriculum.ts"
+import { Process } from "./Process.ts"
 import { Progress } from "./Progress.ts"
 
 class Failed extends Data.TaggedError("Failed")<{}> {}
@@ -44,9 +46,13 @@ const goalCommand = Command.make("goal", {
 
 const modeCommand = Command.make("mode", {
   mode: Argument.String("exercise|project"),
+  folder: Argument.String("folder").pipe(Argument.optional),
+  install: Flag.Boolean("install").pipe(Flag.withDefault(false)),
 }).pipe(
   Command.withDescription("Choose how to practise"),
-  Command.withHandler(() => shell("mode", Effect.succeed([]))),
+  Command.withHandler(({ mode, folder, install }) =>
+    shell("mode", Commands.mode(mode, folder, install)),
+  ),
 )
 
 export const command = Command.make("tutor").pipe(
@@ -55,7 +61,11 @@ export const command = Command.make("tutor").pipe(
   Command.withSubcommands([statusCommand, goalCommand, modeCommand]),
 )
 
-const MainLayer = Layer.mergeAll(Progress.layer, Curriculum.layer).pipe(
+const MainLayer = Layer.mergeAll(
+  Progress.layer,
+  Curriculum.layer,
+  Process.layer,
+).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       CliConfig.layer({ builtIns: [GlobalFlag.Help] }),

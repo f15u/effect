@@ -1,6 +1,11 @@
 import * as Data from "effect/Data"
 
 export class TutorError extends Data.TaggedError("TutorError")<{
-  readonly reason: "WrongPhase" | "UnknownGoal" | "MissingFile"
+  readonly reason:
+    | "WrongPhase"
+    | "UnknownGoal"
+    | "MissingFile"
+    | "InstallFailed"
+    | "BadFolder"
   readonly message: string
 }> {}

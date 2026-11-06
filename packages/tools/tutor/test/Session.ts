@@ -23,6 +23,13 @@ export const session = Effect.gen(function* () {
   const path = yield* Path.Path
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const dir = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-" })
+  const bin = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-bin-" })
+  const installLog = path.join(bin, "installs.log")
+  yield* fs.writeFileString(
+    path.join(bin, "npm"),
+    `#!/bin/sh\necho "$PWD :: $@" >> "${installLog}"\n`,
+    { mode: 0o755 },
+  )
   const cli = path.resolve(import.meta.dirname, "../src/cli.ts")
 
   const t = (...args: ReadonlyArray<string>) =>
@@ -32,6 +39,8 @@ export const session = Effect.gen(function* () {
           ChildProcess.make("node", ["--no-warnings", cli, ...args], {
             cwd: dir,
             stdin: "ignore",
+            env: { PATH: `${bin}:${process.env.PATH}` },
+            extendEnv: true,
           }),
         )
         const [stdout, stderr, code] = yield* Effect.all(
@@ -47,10 +56,21 @@ export const session = Effect.gen(function* () {
     ).pipe(Effect.orDie, Effect.flatMap(clean))
 
   const files = fs.readDirectory(dir)
+  const nested = (sub: string) =>
+    fs
+      .readDirectory(path.join(dir, sub))
+      .pipe(Effect.map((names) => names.sort()))
+
   const read = (file: string) => fs.readFileString(path.join(dir, file))
 
   const write = (file: string, content: string) =>
-    fs.writeFileString(path.join(dir, file), content)
+    fs
+      .makeDirectory(path.dirname(path.join(dir, file)), { recursive: true })
+      .pipe(Effect.andThen(fs.writeFileString(path.join(dir, file), content)))
 
-  return { dir, t, files, read, write }
+  const installs = fs
+    .readFileString(installLog)
+    .pipe(Effect.orElseSucceed(() => ""))
+
+  return { dir, t, files, nested, read, write, installs }
 })

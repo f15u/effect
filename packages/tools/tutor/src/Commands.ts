@@ -2,6 +2,8 @@ import * as Cause from "effect/Cause"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as Option from "effect/Option"
+import { materialize } from "./Exercise.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { allows, youCanNow } from "./Machine.ts"
 import { Progress, stateFile, type State } from "./Progress.ts"
@@ -88,4 +90,31 @@ export const goal = (id: string) =>
       `Goal: ${picked.goal}.`,
       `Path:\n${bullet(path.map((item) => item.title))}`,
     ]
+  })
+
+export const mode = (
+  choice: string,
+  folder: Option.Option<string>,
+  install: boolean,
+) =>
+  Effect.gen(function* () {
+    if (choice !== "exercise") return []
+    if (Option.isNone(folder))
+      return [
+        "No file is written yet. Ask the learner for the exercise folder name. Suggest none.",
+        "Say what the tool will write: the starter file, and a package.json and tsconfig.json so the editor shows types.",
+        "Ask if the tool may install effect and typescript. Then run: tutor mode exercise <folder> [--install]",
+      ]
+    if (/^\/|(^|\/)\.\.(\/|$)/.test(folder.value))
+      return yield* new TutorError({
+        reason: "BadFolder",
+        message: `Folder ${folder.value} must be a relative path inside this folder. Ask the learner for another name.`,
+      })
+    const state = yield* (yield* Progress).read
+    const curriculum = yield* Curriculum
+    return yield* materialize(
+      folder.value,
+      curriculum.concept(state.path[0]!),
+      install,
+    )
   })

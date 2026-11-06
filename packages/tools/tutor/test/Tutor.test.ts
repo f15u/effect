@@ -2,7 +2,13 @@ import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import { allows, commandNames, machine } from "../src/Machine.ts"
 import type { Phase } from "../src/Progress.ts"
+import * as NodeFs from "node:fs"
 import { session, TestLayer } from "./Session.ts"
+
+const starter = NodeFs.readFileSync(
+  new URL("../src/concepts/tagged-errors/starter.ts", import.meta.url),
+  "utf8",
+)
 
 const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
   it.live(
@@ -180,4 +186,131 @@ describe("the transition table", () => {
       }),
     )
   }
+})
+
+describe("exercise mode", () => {
+  live(
+    "writes nothing until the learner names a folder",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise")
+      assert.strictEqual(r.code, 0)
+      assert.match(r.out, /folder name/)
+      assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+      assert.strictEqual(yield* s.installs, "")
+    }),
+  )
+
+  live(
+    "writes the starter, package.json and tsconfig.json in the named folder and says why",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise", "practice")
+      assert.strictEqual(r.code, 0)
+      assert.deepStrictEqual(yield* s.read("practice/main.ts"), starter)
+      assert.include(yield* s.read("practice/package.json"), '"type": "module"')
+      assert.include(yield* s.read("practice/tsconfig.json"), "strict")
+      assert.include(r.out, "practice/main.ts")
+      assert.include(r.out, "practice/package.json")
+      assert.include(r.out, "practice/tsconfig.json")
+      assert.match(r.out, /editor shows types/)
+      assert.strictEqual(yield* s.installs, "")
+    }),
+  )
+
+  live(
+    "never overwrites a file and says it kept it",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.t("goal", "tagged-errors")
+      yield* s.t("mode", "exercise", "practice")
+      yield* s.write("practice/main.ts", "my work")
+      yield* s.write("practice/package.json", '{"name":"mine"}')
+      const r = yield* s.t("mode", "exercise", "practice")
+      assert.strictEqual(r.code, 0)
+      assert.strictEqual(yield* s.read("practice/main.ts"), "my work")
+      assert.strictEqual(
+        yield* s.read("practice/package.json"),
+        '{"name":"mine"}',
+      )
+      assert.include(r.out, "Kept practice/main.ts")
+      assert.include(r.out, "Kept practice/package.json")
+      assert.include(r.out, "Kept practice/tsconfig.json")
+      assert.notInclude(r.out, "Wrote")
+    }),
+  )
+
+  live(
+    "a parent package.json with effect gets only the starter file and no install",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.write(
+        "package.json",
+        JSON.stringify({ dependencies: { effect: "^4.0.0" } }),
+      )
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise", "sub/practice", "--install")
+      assert.strictEqual(r.code, 0)
+      assert.deepStrictEqual(yield* s.read("sub/practice/main.ts"), starter)
+      assert.deepStrictEqual(yield* s.files, [
+        ".effect-tutor.json",
+        "package.json",
+        "sub",
+      ])
+      assert.deepStrictEqual(yield* s.nested("sub/practice"), ["main.ts"])
+      assert.include(r.out, "already has effect")
+      assert.strictEqual(yield* s.installs, "")
+    }),
+  )
+
+  live(
+    "a package.json with effect in the folder itself gets only the starter file",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.write(
+        "practice/package.json",
+        JSON.stringify({ devDependencies: { effect: "^4.0.0" } }),
+      )
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise", "practice", "--install")
+      assert.strictEqual(r.code, 0)
+      assert.deepStrictEqual(yield* s.nested("practice"), [
+        "main.ts",
+        "package.json",
+      ])
+      assert.strictEqual(yield* s.installs, "")
+    }),
+  )
+
+  live(
+    "installs effect and typescript only when the yes flag is passed, and says so",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.t("goal", "tagged-errors")
+      const no = yield* s.t("mode", "exercise", "practice")
+      assert.strictEqual(yield* s.installs, "")
+      assert.match(no.out, /--install/)
+      const yes = yield* s.t("mode", "exercise", "practice", "--install")
+      assert.strictEqual(yes.code, 0)
+      assert.match(
+        yield* s.installs,
+        /practice :: install effect typescript\n$/,
+      )
+      assert.include(yes.out, "Installed effect and typescript")
+    }),
+  )
+
+  live(
+    "refuses a folder outside the current folder and writes nothing",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise", "../escape")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, "relative path")
+      assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+    }),
+  )
 })
