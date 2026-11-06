@@ -140,11 +140,7 @@ const pickGoal = Effect.gen(function* () {
 
 const askProbe = Effect.gen(function* () {
   const canAsk = (yield* McpServer.clientCapabilities).elicitation !== undefined
-  if (!canAsk)
-    return yield* new TutorError({
-      reason: "BadArgument",
-      message: "This client cannot show a picker. Go on to the mode choice.",
-    })
+  if (!canAsk) return yield* Commands.skipProbe
   const prompt = yield* Commands.probePrompt
   const reply = yield* McpServer.elicit({
     message: prompt.message,
@@ -264,7 +260,7 @@ export const registerTools = Effect.gen(function* () {
     {
       mode: prop("exercise or project", { enum: ["exercise", "project"] }),
       folder: prop(
-        "Exercise folder name, relative to this folder. Leave it out if the client can ask the learner: the tool then opens a form. Without a folder name nothing is written.",
+        "Exercise folder name, relative to this folder. A client that can ask the learner gets a form instead, and this value is ignored. Without a folder name nothing is written.",
       ),
       install: {
         type: "boolean",
@@ -289,7 +285,7 @@ export const registerTools = Effect.gen(function* () {
                 field(payload, "install") === true,
                 "mcp",
               )
-            const folder = given === "" ? yield* askFolder : given
+            const folder = yield* askFolder
             if (folder === "") return yield* Effect.fail(noAnswer("folder"))
             const install = yield* askInstall
             return yield* Commands.mode(

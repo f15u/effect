@@ -51,19 +51,8 @@ const goalCommand = Command.make("goal", {
 )
 
 const probeCommand = Command.make("probe").pipe(
-  Command.withDescription("Ask the learner a question (MCP only)"),
-  Command.withHandler(() =>
-    shell(
-      "probe",
-      Effect.fail(
-        new TutorError({
-          reason: "BadArgument",
-          message:
-            "The question goes through the MCP tool tutor_probe. Go on to the mode choice.",
-        }),
-      ),
-    ),
-  ),
+  Command.withDescription("Skip the question (the question is MCP only)"),
+  Command.withHandler(() => shell("probe", Commands.skipProbe)),
 )
 
 const modeCommand = Command.make("mode", {

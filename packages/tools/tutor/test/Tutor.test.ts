@@ -4,7 +4,10 @@ import * as FileSystem from "effect/FileSystem"
 import { allows, commandNames, machine } from "../src/Machine.ts"
 import type { Phase } from "../src/Progress.ts"
 import * as NodeFs from "node:fs"
+import { concepts } from "../src/concepts/index.ts"
 import { session, TestLayer } from "./Session.ts"
+
+const goalConcepts = concepts.filter((item) => item.goal !== undefined)
 
 const starter = NodeFs.readFileSync(
   new URL("../src/concepts/tagged-errors/starter.ts", import.meta.url),
@@ -654,6 +657,165 @@ describe("hints and the solution", () => {
       assert.strictEqual(yield* s.read("practice/main.ts"), starter)
       const again = yield* s.t("hint")
       assert.include(again.out, hints[0])
+    }),
+  )
+})
+
+const seedState = (state: Record<string, unknown>) =>
+  JSON.stringify({
+    phase: "Menu",
+    goal: "",
+    path: [],
+    exercise: "",
+    hints: 0,
+    evidence: {},
+    ...state,
+  })
+
+describe("a menu with nothing left", () => {
+  live(
+    "says in words that no goal is left",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(
+        ".effect-tutor.json",
+        seedState({
+          evidence: Object.fromEntries(
+            goalConcepts.map((item) => [item.id, "Proved"]),
+          ),
+        }),
+      )
+      const r = yield* s.t("status")
+      assert.include(r.out, "No goal is left")
+    }),
+  )
+})
+
+describe("a way out of project work", () => {
+  live(
+    "the learner can switch to an exercise",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("mode", "project")
+      const r = yield* s.t("mode", "exercise", "practice")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.strictEqual(
+        JSON.parse(yield* s.read(".effect-tutor.json")).phase,
+        "Working",
+      )
+    }),
+  )
+})
+
+describe("a resumed trusted session", () => {
+  live(
+    "the shell probe moves on to the mode choice",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(
+        ".effect-tutor.json",
+        seedState({
+          phase: "Probing",
+          goal: "tagged-errors",
+          path: ["tagged-errors"],
+          trusted: true,
+        }),
+      )
+      const r = yield* s.t("probe")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.include(r.out, "tutor mode")
+      assert.strictEqual(
+        JSON.parse(yield* s.read(".effect-tutor.json")).phase,
+        "ChoosingMode",
+      )
+    }),
+  )
+})
+
+describe("revisit", () => {
+  live(
+    "follows needs through a proved concept to one that is only explained",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(
+        ".effect-tutor.json",
+        seedState({
+          evidence: {
+            "tagged-errors": "Explained",
+            "typed-failure": "Proved",
+            "stop-on-broken-rule": "Proved",
+          },
+        }),
+      )
+      yield* s.t("goal", "catch-a-defect", "--write")
+      yield* s.t("mode", "exercise", "practice")
+      const starterText = yield* s.read("practice/main.ts")
+      yield* s.write("practice/main.ts", `${starterText}\n// tried\n`)
+      const r = yield* s.t("check")
+      assert.include(r.out, "REVISIT")
+      const state = JSON.parse(yield* s.read(".effect-tutor.json"))
+      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+    }),
+  )
+})
+
+describe("confirm on a project file", () => {
+  const project = (setup: (s: any) => Effect.Effect<unknown, any, any>) =>
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.t("goal", "tagged-errors", "--write")
+      yield* s.t("mode", "project")
+      yield* setup(s)
+      return s
+    })
+
+  live(
+    "refuses a short quote and says the minimum",
+    Effect.gen(function* () {
+      const s = yield* project((p) => p.write("app.ts", "function a() {\n}\n"))
+      const r = yield* s.t("confirm", "app.ts", "--quote", "}")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, "8")
+      const ok = yield* s.t("confirm", "app.ts", "--quote", "function a() {")
+      assert.strictEqual(ok.code, 0, ok.out)
+    }),
+  )
+
+  live(
+    "accepts a file outside the project folder",
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const other = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-out-" })
+      const file = `${other}/app.ts`
+      yield* fs.writeFileString(file, "export const rows = 1\n")
+      const s = yield* project(() => Effect.void)
+      const r = yield* s.t("confirm", file, "--quote", "export const rows = 1")
+      assert.strictEqual(r.code, 0, r.out)
+    }),
+  )
+
+  live(
+    "refuses a folder and a file over the size limit",
+    Effect.gen(function* () {
+      const s = yield* project((p) =>
+        Effect.gen(function* () {
+          yield* p.write("dir.ts/inner.ts", "export const rows = 1\n")
+          yield* p.write(
+            "big.ts",
+            `export const rows = 1\n${"x".repeat(2_000_000)}\n`,
+          )
+        }),
+      )
+      for (const file of ["dir.ts", "big.ts"]) {
+        const r = yield* s.t(
+          "confirm",
+          file,
+          "--quote",
+          "export const rows = 1",
+        )
+        assert.strictEqual(r.code, 1, file)
+      }
     }),
   )
 })

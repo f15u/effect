@@ -7,8 +7,9 @@ import * as Path from "effect/Path"
 import * as Random from "effect/Random"
 import { Checker, renderCheck } from "./Checker.ts"
 import { materialize } from "./Exercise.ts"
-import { notSure, probeOptions } from "./Concept.ts"
+import { notSure, probeOptions, type Concept } from "./Concept.ts"
 import { Curriculum } from "./Curriculum.ts"
+import { holdsLine } from "./ProjectFile.ts"
 import { allows, youCanNow, type Surface } from "./Machine.ts"
 import { Progress, stateFile, type State } from "./Progress.ts"
 import { TutorError } from "./TutorError.ts"
@@ -29,6 +30,8 @@ const instruction = (state: State) =>
         const open = curriculum.goals.filter(
           (item) => state.evidence[item.id] === undefined,
         )
+        if (open.length === 0)
+          return "No goal is left. Every goal is done. Say so in one line."
         return `Show the learner these goals in plain words. Ask which one they want.\n${bullet(open.map((item) => `${item.id}: ${item.goal}`))}`
       }
       case "Probing":
@@ -141,6 +144,17 @@ export const goal = (
     ]
   })
 
+export const skipProbe = Effect.gen(function* () {
+  yield* (yield* Progress).update((current) => ({
+    ...current,
+    phase: "ChoosingMode",
+    trusted: false,
+  }))
+  return [
+    "This client cannot show the learner a question, so the question is skipped.",
+  ]
+})
+
 export const mode = (
   choice: string,
   folder: Option.Option<string>,
@@ -192,6 +206,49 @@ const working = Effect.gen(function* () {
   return { state, concept: curriculum.concept(state.path[0]!) }
 })
 
+const raise = (
+  evidence: State["evidence"],
+  id: string,
+  level: Level,
+): State["evidence"] => ({
+  ...evidence,
+  [id]: evidence[id] === "Proved" ? "Proved" : level,
+})
+
+const completed = (id: string, level: Level) =>
+  Effect.gen(function* () {
+    const progress = yield* Progress
+    const last = (yield* progress.read).path.length === 1
+    yield* progress.update((current) => ({
+      ...current,
+      phase: last ? "Menu" : "Replaying",
+      path: last ? [] : current.path,
+      goal: last ? "" : current.goal,
+      exercise: "",
+      hints: 0,
+      evidence: raise(current.evidence, id, level),
+    }))
+    return last
+      ? ["The goal is reached. Say so in one line. Ask for no confirmation."]
+      : []
+  })
+
+const explainedNeed = (
+  concept: Concept,
+  evidence: State["evidence"],
+): Concept | undefined => {
+  const seen = new Set<string>()
+  let layer = concept.needs
+  while (layer.length > 0) {
+    const hit = layer.find((item) => evidence[item.id] === "Explained")
+    if (hit !== undefined) return hit
+    layer = layer
+      .flatMap((item) => item.needs)
+      .filter((item) => !seen.has(item.id) && seen.add(item.id))
+  }
+  return undefined
+}
+
 export const check = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -214,9 +271,7 @@ export const check = Effect.gen(function* () {
   const lines = renderCheck(result)
   if (result._tag !== "Passed") {
     const edited = source !== (yield* curriculum.file(concept, "starter.ts"))
-    const need = edited
-      ? concept.needs.find((item) => state.evidence[item.id] === "Explained")
-      : undefined
+    const need = edited ? explainedNeed(concept, state.evidence) : undefined
     if (need !== undefined) {
       yield* (yield* Progress).update((current) => ({
         ...current,
@@ -304,32 +359,13 @@ export const solution = (said: string) =>
     ]
   })
 
-const sourceFile = /\.(?:[cm]?[jt]s|[jt]sx)$/
-
-const notFound = (file: string) =>
-  new TutorError({
-    reason: "BadArgument",
-    message: `${file} is not a source file of the learner's project that holds that line. Ask which file shows it, read it again, and quote one line exactly.`,
-  })
-
 export const confirm = <R = never>(
   file: string,
   quote: string,
   ask: Option.Option<Effect.Effect<boolean, never, R>> = Option.none(),
 ) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const line = quote.trim()
-    const held =
-      line !== "" &&
-      sourceFile.test(file) &&
-      (yield* fs.readFileString(file).pipe(
-        Effect.map((source) =>
-          source.split("\n").some((each) => each.trim() === line),
-        ),
-        Effect.orElseSucceed(() => false),
-      ))
-    if (!held) return yield* notFound(file)
+    yield* holdsLine(file, quote)
     if (Option.isNone(ask))
       return [
         "The file holds that line. This client cannot ask the learner, so nothing is recorded. Go on teaching in chat.",
@@ -412,7 +448,7 @@ export const probe = (reply: ProbeReply) =>
         phase: rest.length === 0 ? "Menu" : "Probing",
         path: rest,
         goal: rest.length === 0 ? "" : current.goal,
-        evidence: { ...current.evidence, [concept.id]: "Explained" },
+        evidence: raise(current.evidence, concept.id, "Explained"),
       }))
       return ["The learner picked the key idea.", ...said]
     }

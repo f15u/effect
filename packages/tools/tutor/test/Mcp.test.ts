@@ -572,3 +572,78 @@ describe("tutor mcp project work", () => {
     }),
   )
 })
+
+describe("tutor mcp review fixes", () => {
+  live(
+    "a trusted state resumed with a client that cannot ask moves on to the mode choice",
+    Effect.gen(function* () {
+      const s = yield* mcpSession()
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Probing",
+          goal: "tagged-errors",
+          path: ["tagged-errors"],
+          exercise: "",
+          hints: 0,
+          evidence: {},
+          trusted: true,
+        }),
+      )
+      const r = yield* s.tool("tutor_probe")
+      assert.isFalse(r.isError)
+      assert.include(r.out, "tutor_mode")
+      assert.strictEqual((yield* s.state).phase, "ChoosingMode")
+    }),
+  )
+
+  live(
+    "a project yes never downgrades a proved concept",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({ capabilities: canAsk, answer: owner(yes) })
+      yield* s.write("db.ts", "export const rows = 1\n")
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "ProjectWork",
+          goal: "tagged-errors",
+          path: ["tagged-errors"],
+          exercise: "",
+          hints: 0,
+          evidence: { "tagged-errors": "Proved" },
+        }),
+      )
+      yield* s.tool("tutor_confirm", {
+        file: "db.ts",
+        quote: "export const rows = 1",
+      })
+      assert.deepStrictEqual((yield* s.state).evidence, {
+        "tagged-errors": "Proved",
+      })
+    }),
+  )
+
+  live(
+    "a client that can ask always gets the folder form, whatever folder the agent names",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({
+        capabilities: canAsk,
+        answer: (request) =>
+          request.properties.folder
+            ? { action: "accept", content: { folder: "learner" } }
+            : request.properties.install
+              ? { action: "accept", content: { install: false } }
+              : choices(request).includes(nothingForNow)
+                ? pick(taggedErrors.goal!)
+                : pick(notSure),
+      })
+      yield* s.tool("tutor_goal")
+      yield* s.tool("tutor_probe")
+      yield* s.tool("tutor_mode", { mode: "exercise", folder: "agent-pick" })
+      assert.isTrue(s.asked.some((item) => item.properties.folder))
+      const names = yield* s.files
+      assert.include(names, "learner")
+      assert.notInclude(names, "agent-pick")
+    }),
+  )
+})

@@ -75,6 +75,12 @@ export const machine: Record<Phase, ReadonlyArray<Action>> = {
   ],
   ProjectWork: [
     {
+      name: "mode",
+      cli: "tutor mode exercise <folder>",
+      tool: 'tutor_mode {mode: "exercise"}',
+      summary: "leave project work and practise with a small exercise",
+    },
+    {
       name: "confirm",
       cli: 'tutor confirm <file> --quote "<a line of the file>"',
       tool: 'tutor_confirm {file: "<file>", quote: "<a line of the file>"}',
