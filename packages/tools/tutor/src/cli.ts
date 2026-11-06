@@ -19,6 +19,7 @@ import { Curriculum } from "./Curriculum.ts"
 import { McpLive } from "./mcp.ts"
 import { Process } from "./Process.ts"
 import { Progress } from "./Progress.ts"
+import { setup } from "./Setup.ts"
 
 class Failed extends Data.TaggedError("Failed")<{}> {}
 
@@ -100,6 +101,11 @@ const mcpCommand = Command.make("mcp").pipe(
   Command.withHandler(() => Layer.launch(McpLive)),
 )
 
+const setupCommand = Command.make("setup").pipe(
+  Command.withDescription("Register the Tutor CLI with your agents"),
+  Command.withHandler(() => setup),
+)
+
 export const command = Command.make("tutor").pipe(
   Command.withDescription("Learn Effect with an AI tutor"),
   Command.withHandler(() => shell("status", Commands.status)),
@@ -113,6 +119,7 @@ export const command = Command.make("tutor").pipe(
     solutionCommand,
     resetCommand,
     mcpCommand,
+    setupCommand,
   ]),
 )
 
