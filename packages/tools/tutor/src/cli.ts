@@ -13,7 +13,7 @@ import * as Command from "effect/cli/Command"
 import * as Flag from "effect/cli/Flag"
 import * as GlobalFlag from "effect/cli/GlobalFlag"
 import * as Commands from "./Commands.ts"
-import type { TutorError } from "./TutorError.ts"
+import { TutorError } from "./TutorError.ts"
 import { Checker } from "./Checker.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { McpLive } from "./mcp.ts"
@@ -44,6 +44,22 @@ const goalCommand = Command.make("goal", {
 }).pipe(
   Command.withDescription("Pick a goal"),
   Command.withHandler(({ id }) => shell("goal", Commands.goal(id))),
+)
+
+const probeCommand = Command.make("probe").pipe(
+  Command.withDescription("Ask the learner a question (MCP only)"),
+  Command.withHandler(() =>
+    shell(
+      "probe",
+      Effect.fail(
+        new TutorError({
+          reason: "BadArgument",
+          message:
+            "The question goes through the MCP tool tutor_probe. Go on to the mode choice.",
+        }),
+      ),
+    ),
+  ),
 )
 
 const modeCommand = Command.make("mode", {
@@ -90,6 +106,7 @@ export const command = Command.make("tutor").pipe(
   Command.withSubcommands([
     statusCommand,
     goalCommand,
+    probeCommand,
     modeCommand,
     checkCommand,
     hintCommand,

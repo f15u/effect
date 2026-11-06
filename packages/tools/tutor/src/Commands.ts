@@ -4,8 +4,10 @@ import * as Exit from "effect/Exit"
 import * as FileSystem from "effect/FileSystem"
 import * as Option from "effect/Option"
 import * as Path from "effect/Path"
+import * as Random from "effect/Random"
 import { Checker, renderCheck } from "./Checker.ts"
 import { materialize } from "./Exercise.ts"
+import { notSure, probeOptions } from "./Concept.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { allows, youCanNow, type Surface } from "./Machine.ts"
 import { Progress, stateFile, type State } from "./Progress.ts"
@@ -29,6 +31,8 @@ const instruction = (state: State) =>
         )
         return `Show the learner these goals in plain words. Ask which one they want.\n${bullet(open.map((item) => `${item.id}: ${item.goal}`))}`
       }
+      case "Probing":
+        return "Tell the learner a question will appear for them in a picker. Call the probe tool. Never describe the options."
       case "ChoosingMode":
         return "Ask the learner: practise with a small exercise, or in their own project?"
       case "Working": {
@@ -79,7 +83,17 @@ export const execute = <E, R>(
 
 export const status = Effect.succeed<ReadonlyArray<string>>([])
 
-export const goal = (id: string) =>
+export const nothingForNow = "Nothing for now."
+
+export const goalPrompt = Effect.gen(function* () {
+  const curriculum = yield* Curriculum
+  const state = yield* (yield* Progress).read
+  return curriculum.goals
+    .filter((item) => state.evidence[item.id] === undefined)
+    .map((item) => ({ id: item.id, label: item.goal! }))
+})
+
+export const goal = (id: string, trusted = false) =>
   Effect.gen(function* () {
     const curriculum = yield* Curriculum
     yield* curriculum.validateGoals([id])
@@ -94,9 +108,10 @@ export const goal = (id: string) =>
         ]
     yield* progress.update((state) => ({
       ...state,
-      phase: "ChoosingMode",
+      phase: trusted ? "Probing" : "ChoosingMode",
       goal: picked.id,
       path: path.map((item) => item.id),
+      trusted,
     }))
     return [
       ...notice,
@@ -177,7 +192,8 @@ export const check = Effect.gen(function* () {
   const rest = state.path.slice(1)
   yield* (yield* Progress).update((current) => ({
     ...current,
-    phase: rest.length === 0 ? "Menu" : "ChoosingMode",
+    phase:
+      rest.length === 0 ? "Menu" : current.trusted ? "Probing" : "ChoosingMode",
     path: rest,
     goal: rest.length === 0 ? "" : current.goal,
     exercise: "",
@@ -240,3 +256,55 @@ export const reset = Effect.gen(function* () {
   yield* (yield* Progress).update((current) => ({ ...current, hints: 0 }))
   return [`Reset ${file} to the starter. The hints start again.`]
 })
+
+export type ProbeReply =
+  | { readonly _tag: "Picked"; readonly label: string; readonly words: string }
+  | { readonly _tag: "Declined"; readonly words: string }
+
+export const probePrompt = Effect.gen(function* () {
+  const { concept } = yield* working
+  const options = yield* Random.shuffle(
+    probeOptions(concept).filter((option) => option !== notSure),
+  )
+  return {
+    message: `${concept.probe.question}\n(Open the list below and choose one.)`,
+    options: [...options, notSure],
+  }
+})
+
+export const probe = (reply: ProbeReply) =>
+  Effect.gen(function* () {
+    const { state, concept } = yield* working
+    const progress = yield* Progress
+    const words = reply.words.trim()
+    const said = words === "" ? [] : [`The learner also wrote: "${words}"`]
+    const intoConcept = progress.update((current) => ({
+      ...current,
+      phase: "ChoosingMode",
+    }))
+    if (reply._tag === "Declined") {
+      yield* intoConcept
+      return ["The learner declined the question.", ...said]
+    }
+    if (reply.label === concept.probe.correct) {
+      const rest = state.path.slice(1)
+      yield* progress.update((current) => ({
+        ...current,
+        phase: rest.length === 0 ? "Menu" : "Probing",
+        path: rest,
+        goal: rest.length === 0 ? "" : current.goal,
+        evidence: { ...current.evidence, [concept.id]: "Explained" },
+      }))
+      return ["The learner picked the key idea.", ...said]
+    }
+    yield* intoConcept
+    const wrong = concept.probe.distractors.find(
+      (item) => item.text === reply.label,
+    )
+    return [
+      wrong === undefined
+        ? "The learner is not sure."
+        : `The learner picked a wrong idea. Their belief: "${wrong.belief}". Teach against it.`,
+      ...said,
+    ]
+  })

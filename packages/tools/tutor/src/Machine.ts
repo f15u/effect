@@ -18,6 +18,14 @@ export const machine: Record<Phase, ReadonlyArray<Action>> = {
       summary: "pick the goal the learner chose",
     },
   ],
+  Probing: [
+    {
+      name: "probe",
+      cli: "tutor probe",
+      tool: "tutor_probe",
+      summary: "show the learner one question with options; they pick",
+    },
+  ],
   ChoosingMode: [
     {
       name: "mode",

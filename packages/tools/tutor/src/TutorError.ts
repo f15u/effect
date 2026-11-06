@@ -10,5 +10,9 @@ export class TutorError extends Data.TaggedError("TutorError")<{
     | "MissingCommand"
     | "SolutionLocked"
     | "NotYet"
+    | "NoGoalLeft"
+    | "Declined"
+    | "NothingForNow"
+    | "BadArgument"
   readonly message: string
 }> {}

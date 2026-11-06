@@ -164,9 +164,26 @@ describe("the transition table", () => {
     Phase,
     (
       t: (...args: Array<string>) => Effect.Effect<unknown, any, any>,
+      write: (
+        file: string,
+        content: string,
+      ) => Effect.Effect<unknown, any, any>,
     ) => Effect.Effect<unknown, any, any>
   > = {
     Menu: () => Effect.void,
+    Probing: (_, write) =>
+      write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Probing",
+          goal: "tagged-errors",
+          path: ["tagged-errors"],
+          exercise: "",
+          hints: 0,
+          evidence: {},
+          trusted: true,
+        }),
+      ),
     ChoosingMode: (t) => t("goal", "tagged-errors"),
     Working: (t) =>
       t("goal", "tagged-errors").pipe(
@@ -175,6 +192,7 @@ describe("the transition table", () => {
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
     goal: ["tagged-errors"],
+    probe: [],
     mode: ["exercise"],
     check: [],
     hint: [],
@@ -187,7 +205,7 @@ describe("the transition table", () => {
       `${phase === "Menu" ? "the first step" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
       Effect.gen(function* () {
         const s = yield* session()
-        yield* reach[phase](s.t)
+        yield* reach[phase](s.t, s.write)
         for (const name of commandNames.filter((n) => !allows(phase, n))) {
           const r = yield* s.t(name, ...dummy[name]!)
           assert.strictEqual(r.code, 1, name)

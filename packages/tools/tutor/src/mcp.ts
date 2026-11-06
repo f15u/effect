@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
 import * as Path from "effect/Path"
 import * as Option from "effect/Option"
+import * as Schema from "effect/Schema"
 import * as McpProtocol from "effect/ai/McpProtocol"
 import * as McpSchema from "effect/ai/McpSchema"
 import * as McpServer from "effect/ai/McpServer"
@@ -11,6 +12,7 @@ import { Checker } from "./Checker.ts"
 import * as Commands from "./Commands.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { Process } from "./Process.ts"
+import { TutorError } from "./TutorError.ts"
 import { Progress } from "./Progress.ts"
 import { agentInstructions } from "./rules.ts"
 
@@ -32,6 +34,78 @@ const prop = (description: string, extra: Record<string, unknown> = {}) => ({
   type: "string",
   description,
   ...extra,
+})
+
+const words = Schema.optionalKey(
+  Schema.String.annotate({
+    title: "In your own words (optional)",
+    description: "Anything you want the tutor to know.",
+  }),
+)
+
+const pickGoal = Effect.gen(function* () {
+  const open = yield* Commands.goalPrompt
+  if (open.length === 0)
+    return yield* new TutorError({
+      reason: "NoGoalLeft",
+      message: "No goal is left. Every goal is done.",
+    })
+  const reply = yield* McpServer.elicit({
+    message:
+      "What do you want to be able to do? (Open the list below and choose one.)",
+    schema: Schema.Struct({
+      choice: Schema.Literals([
+        ...open.map((item) => item.label),
+        Commands.nothingForNow,
+      ] as unknown as [string, ...Array<string>]),
+      words,
+    }),
+  }).pipe(
+    Effect.catchTag("ElicitationDeclined", () =>
+      Effect.fail(
+        new TutorError({
+          reason: "Declined",
+          message: "The learner did not pick a goal. Ask again.",
+        }),
+      ),
+    ),
+  )
+  if (reply.choice === Commands.nothingForNow)
+    return yield* new TutorError({
+      reason: "NothingForNow",
+      message: "The learner wants nothing for now. Stop here and say goodbye.",
+    })
+  const picked = open.find((item) => item.label === reply.choice)!
+  const said = (reply.words ?? "").trim()
+  const lines = yield* Commands.goal(picked.id, true)
+  return said === "" ? lines : [...lines, `The learner also wrote: "${said}"`]
+})
+
+const askProbe = Effect.gen(function* () {
+  const canAsk = (yield* McpServer.clientCapabilities).elicitation !== undefined
+  if (!canAsk)
+    return yield* new TutorError({
+      reason: "BadArgument",
+      message: "This client cannot show a picker. Go on to the mode choice.",
+    })
+  const prompt = yield* Commands.probePrompt
+  const reply = yield* McpServer.elicit({
+    message: prompt.message,
+    schema: Schema.Struct({
+      choice: Schema.Literals(prompt.options as [string, ...Array<string>]),
+      words,
+    }),
+  }).pipe(
+    Effect.map((answer): Commands.ProbeReply => ({
+      _tag: "Picked",
+      label: answer.choice,
+      words: answer.words ?? "",
+    })),
+    Effect.catchTag("ElicitationDeclined", () =>
+      Effect.succeed<Commands.ProbeReply>({ _tag: "Declined", words: "" }),
+    ),
+  )
+  return yield* Commands.probe(reply)
 })
 
 export const registerTools = Effect.gen(function* () {
@@ -88,20 +162,31 @@ export const registerTools = Effect.gen(function* () {
   )
   yield* add(
     "goal",
-    "Picks the goal the learner chose in chat.",
+    "Lets the learner pick their goal in a picker. Only a client that cannot show a picker needs the goals argument, with one goal id the learner chose in chat.",
     {
       goals: {
         type: "array",
         items: { type: "string" },
-        description: "One goal id.",
+        description:
+          "One goal id. Only for a client that cannot show a picker.",
       },
     },
-    ["goals"],
-    (payload) => {
-      const goals = field(payload, "goals")
-      const id = Array.isArray(goals) ? String(goals[0] ?? "") : ""
-      return via("goal", Commands.goal(id))
-    },
+    [],
+    (payload) =>
+      Effect.gen(function* () {
+        const canAsk =
+          (yield* McpServer.clientCapabilities).elicitation !== undefined
+        const goals = field(payload, "goals")
+        const given = Array.isArray(goals) ? String(goals[0] ?? "") : ""
+        return yield* via("goal", canAsk ? pickGoal : Commands.goal(given))
+      }),
+  )
+  yield* add(
+    "probe",
+    "Shows the learner one single-choice question in a picker. The learner picks; the server records it. Takes no argument. Never describe the options.",
+    {},
+    [],
+    () => via("probe", askProbe),
   )
   yield* add(
     "mode",
