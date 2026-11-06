@@ -189,6 +189,18 @@ describe("the transition table", () => {
       t("goal", "tagged-errors").pipe(
         Effect.andThen(t("mode", "exercise", "practice")),
       ),
+    Replaying: (_, write) =>
+      write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Replaying",
+          goal: "catch-a-defect",
+          path: ["tagged-errors", "catch-a-defect"],
+          exercise: "",
+          hints: 0,
+          evidence: { "tagged-errors": "Proved" },
+        }),
+      ),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
     goal: ["tagged-errors"],
@@ -198,11 +210,12 @@ describe("the transition table", () => {
     hint: [],
     solution: [],
     reset: [],
+    replay: ["skipped"],
   }
 
   for (const phase of Object.keys(reach) as Array<Phase>) {
     live(
-      `${phase === "Menu" ? "the first step" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
+      `${phase === "Menu" ? "the first step" : phase === "Replaying" ? "in the replay" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
       Effect.gen(function* () {
         const s = yield* session()
         yield* reach[phase](s.t, s.write)
@@ -392,11 +405,41 @@ describe("check", () => {
       const r = yield* s.t("check")
       assert.strictEqual(r.code, 0, r.out)
       assert.include(r.out, "PASSED")
-      assert.include(r.out, "tutor mode project")
+      assert.include(r.out, "tutor replay")
       assert.notInclude(r.out, "tutor check")
       assert.include(
         yield* s.read(".effect-tutor.json"),
         '"tagged-errors":"Proved"',
+      )
+    }),
+  )
+
+  live(
+    "a passing check that leaves more concepts offers the replay",
+    Effect.gen(function* () {
+      const s = yield* working("catch-a-defect")
+      yield* s.write("practice/main.ts", solution)
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.include(r.out, "tutor replay answered")
+      assert.include(r.out, "tutor replay skipped")
+      assert.notInclude(r.out, "tutor check")
+    }),
+  )
+
+  live(
+    "a skipped replay moves on to the next concept",
+    Effect.gen(function* () {
+      const s = yield* working("catch-a-defect")
+      yield* s.write("practice/main.ts", solution)
+      yield* s.t("check")
+      const r = yield* s.t("replay", "skipped")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.include(r.out, "tutor mode project")
+      assert.notInclude(r.out, "tutor replay")
+      assert.include(
+        yield* s.read(".effect-tutor.json"),
+        '"path":["catch-a-defect"]',
       )
     }),
   )

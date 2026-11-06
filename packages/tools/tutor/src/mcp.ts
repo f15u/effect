@@ -281,6 +281,13 @@ export const registerTools = Effect.gen(function* () {
     [],
     () => via("check", Commands.check),
   )
+  yield* add(
+    "replay",
+    "Records that the learner answered the replay question or skipped it. Never blocks.",
+    { how: prop("answered or skipped", { enum: ["answered", "skipped"] }) },
+    ["how"],
+    (payload) => via("replay", Commands.replay(string(payload, "how"))),
+  )
   yield* add("hint", "Gives the next hint.", {}, [], () =>
     via("hint", Commands.hint),
   )

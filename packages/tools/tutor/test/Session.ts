@@ -11,7 +11,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
 export const TestLayer = NodeServices.layer
 
 const phaseNames =
-  /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|Retelling|\bOffering\b|\bFinished\b/
+  /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|Retelling|\bOffering\b|\bFinished\b|Replaying/
 
 const clean = <A extends { readonly out: string }>(result: A) =>
   result.out.includes("[object Object]")

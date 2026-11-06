@@ -79,6 +79,15 @@ const checkCommand = Command.make("check").pipe(
   Command.withHandler(() => shell("check", Commands.check)),
 )
 
+const replayCommand = Command.make("replay", {
+  how: Argument.String("answered|skipped"),
+}).pipe(
+  Command.withDescription(
+    "Say if the learner answered the replay or skipped it",
+  ),
+  Command.withHandler(({ how }) => shell("replay", Commands.replay(how))),
+)
+
 const hintCommand = Command.make("hint").pipe(
   Command.withDescription("Give the next hint"),
   Command.withHandler(() => shell("hint", Commands.hint)),
@@ -115,6 +124,7 @@ export const command = Command.make("tutor").pipe(
     probeCommand,
     modeCommand,
     checkCommand,
+    replayCommand,
     hintCommand,
     solutionCommand,
     resetCommand,

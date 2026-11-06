@@ -35,6 +35,11 @@ const instruction = (state: State) =>
         return "Tell the learner a question will appear for them in a picker. Call the probe tool. Never describe the options."
       case "ChoosingMode":
         return "Ask the learner: practise with a small exercise, or in their own project?"
+      case "Replaying": {
+        const curriculum = yield* Curriculum
+        const concept = curriculum.concept(state.path[0]!)
+        return `Tell the learner plainly that "${concept.title}" is complete and nothing is missing. Then ask, as an optional question, the same question again (would they answer differently now?):\n  "${concept.probe.question}"\nThe learner may answer or skip. Never block on it.`
+      }
       case "Working": {
         const curriculum = yield* Curriculum
         const concept = curriculum.concept(state.path[0]!)
@@ -189,19 +194,33 @@ export const check = Effect.gen(function* () {
       reason: "NotYet",
       message: lines.join("\n"),
     })
-  const rest = state.path.slice(1)
+  const last = state.path.length === 1
   yield* (yield* Progress).update((current) => ({
     ...current,
-    phase:
-      rest.length === 0 ? "Menu" : current.trusted ? "Probing" : "ChoosingMode",
-    path: rest,
-    goal: rest.length === 0 ? "" : current.goal,
+    phase: last ? "Menu" : "Replaying",
+    path: last ? [] : current.path,
+    goal: last ? "" : current.goal,
     exercise: "",
     hints: 0,
     evidence: { ...current.evidence, [concept.id]: "Proved" },
   }))
   return lines
 })
+export const replay = (how: string) =>
+  Effect.gen(function* () {
+    if (how !== "answered" && how !== "skipped")
+      return yield* new TutorError({
+        reason: "BadArgument",
+        message: `Bad value "${how}". Use answered or skipped.`,
+      })
+    yield* (yield* Progress).update((current) => ({
+      ...current,
+      phase: current.trusted ? "Probing" : "ChoosingMode",
+      path: current.path.slice(1),
+    }))
+    return [] as ReadonlyArray<string>
+  })
+
 export const hint = Effect.gen(function* () {
   const { state, concept } = yield* working
   const next = concept.hints[state.hints]
