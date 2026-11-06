@@ -26,6 +26,30 @@ export const machine: Record<Phase, ReadonlyArray<Action>> = {
       summary: "practise in the learner's own project",
     },
   ],
+  Working: [
+    {
+      name: "mode",
+      cli: "tutor mode exercise <folder> --install",
+      summary: "write missing exercise files again, or install after a yes",
+    },
+    {
+      name: "check",
+      cli: "tutor check",
+      summary: "run the goal test on the learner's file",
+    },
+    { name: "hint", cli: "tutor hint", summary: "give the next hint" },
+    {
+      name: "solution",
+      cli: 'tutor solution --said "<the learner\'s words asking for it>"',
+      summary:
+        "show the solution (locked until the hints are used, or the learner asks)",
+    },
+    {
+      name: "reset",
+      cli: "tutor reset",
+      summary: "restore the starter file and clear the hints",
+    },
+  ],
 }
 
 export const commandNames: ReadonlyArray<string> = [

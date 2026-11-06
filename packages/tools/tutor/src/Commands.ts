@@ -2,7 +2,10 @@ import * as Cause from "effect/Cause"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as FileSystem from "effect/FileSystem"
 import * as Option from "effect/Option"
+import * as Path from "effect/Path"
+import { Checker, renderCheck } from "./Checker.ts"
 import { materialize } from "./Exercise.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { allows, youCanNow } from "./Machine.ts"
@@ -29,6 +32,11 @@ const instruction = (state: State) =>
       }
       case "ChoosingMode":
         return "Ask the learner: practise with a small exercise, or in their own project?"
+      case "Working": {
+        const curriculum = yield* Curriculum
+        const concept = curriculum.concept(state.path[0]!)
+        return `The learner edits ${state.exercise}/main.ts. Teach "${concept.title}" by asking questions. Key idea (do not recite it): ${concept.keyIdea}\nHints used: ${state.hints}/${concept.hints.length}.`
+      }
     }
   })
 
@@ -63,7 +71,10 @@ export const execute = <E, R>(
       }
     }
     lines.push(youCanNow(after.phase))
-    return { text: lines.join("\n"), ok: Exit.isSuccess(exit) } satisfies Output
+    return {
+      text: lines.join("\n"),
+      ok: Exit.isSuccess(exit),
+    } satisfies Output
   }).pipe(Effect.orDie)
 
 export const status = Effect.succeed<ReadonlyArray<string>>([])
@@ -112,9 +123,114 @@ export const mode = (
       })
     const state = yield* (yield* Progress).read
     const curriculum = yield* Curriculum
-    return yield* materialize(
+    const lines = yield* materialize(
       folder.value,
       curriculum.concept(state.path[0]!),
       install,
     )
+    yield* (yield* Progress).update((current) => ({
+      ...current,
+      phase: "Working",
+      exercise: folder.value,
+      hints: 0,
+    }))
+    return lines
   })
+
+const working = Effect.gen(function* () {
+  const state = yield* (yield* Progress).read
+  const curriculum = yield* Curriculum
+  return { state, concept: curriculum.concept(state.path[0]!) }
+})
+
+export const check = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const curriculum = yield* Curriculum
+  const { state, concept } = yield* working
+  const file = path.join(state.exercise, "main.ts")
+  const source = yield* fs.readFileString(file).pipe(
+    Effect.mapError(
+      () =>
+        new TutorError({
+          reason: "MissingFile",
+          message: `Cannot read ${file}. Ask the learner to put the exercise file back, or run: tutor reset`,
+        }),
+    ),
+  )
+  const result = yield* (yield* Checker).run(
+    yield* curriculum.file(concept, "goal.test.ts"),
+    source,
+  )
+  const lines = renderCheck(result)
+  if (result._tag !== "Passed")
+    return yield* new TutorError({
+      reason: "NotYet",
+      message: lines.join("\n"),
+    })
+  const rest = state.path.slice(1)
+  yield* (yield* Progress).update((current) => ({
+    ...current,
+    phase: rest.length === 0 ? "Menu" : "ChoosingMode",
+    path: rest,
+    goal: rest.length === 0 ? "" : current.goal,
+    exercise: "",
+    hints: 0,
+    evidence: { ...current.evidence, [concept.id]: "Proved" },
+  }))
+  return lines
+})
+export const hint = Effect.gen(function* () {
+  const { state, concept } = yield* working
+  const next = concept.hints[state.hints]
+  if (next === undefined)
+    return [
+      "No more hints. The solution is now unlocked.",
+    ] as ReadonlyArray<string>
+  yield* (yield* Progress).update((current) => ({
+    ...current,
+    hints: current.hints + 1,
+  }))
+  return [
+    `HINT ${state.hints + 1}/${concept.hints.length}: ${next}`,
+    "Give this hint in your own words. Do not add more.",
+  ] as ReadonlyArray<string>
+})
+
+export const solution = (said: string) =>
+  Effect.gen(function* () {
+    const { state, concept } = yield* working
+    if (said.trim() === "" && state.hints < concept.hints.length)
+      return yield* new TutorError({
+        reason: "SolutionLocked",
+        message: `LOCKED. The learner used ${state.hints} of ${concept.hints.length} hints. Do not reveal the solution. Give a hint, or ask a guiding question. Only if the learner asks for the solution in their own words, pass those words with --said.`,
+      })
+    const curriculum = yield* Curriculum
+    return [
+      `SOLUTION for ${concept.id}:`,
+      "",
+      yield* curriculum.file(concept, "solution.ts"),
+      "The learner must type it into their file themselves.",
+    ]
+  })
+
+export const reset = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const curriculum = yield* Curriculum
+  const { state, concept } = yield* working
+  const file = path.join(state.exercise, "main.ts")
+  yield* fs
+    .writeFileString(file, yield* curriculum.file(concept, "starter.ts"))
+    .pipe(
+      Effect.mapError(
+        () =>
+          new TutorError({
+            reason: "MissingFile",
+            message: `Cannot write ${file}.`,
+          }),
+      ),
+    )
+  yield* (yield* Progress).update((current) => ({ ...current, hints: 0 }))
+  return [`Reset ${file} to the starter. The hints start again.`]
+})

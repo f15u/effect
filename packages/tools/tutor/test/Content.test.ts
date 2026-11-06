@@ -48,7 +48,9 @@ describe("the content check", () => {
     "a starter that passes its goal test is reported",
     Effect.gen(function* () {
       const check = yield* ContentCheck
-      const bad = yield* withFiles(concepts[0], { "starter.ts": "solution.ts" })
+      const bad = yield* withFiles(concepts[0], {
+        "starter.ts": "solution.ts",
+      })
       assert.deepStrictEqual(yield* check.check(bad), [
         "the starter passes its goal test",
       ])
@@ -59,7 +61,9 @@ describe("the content check", () => {
     "a solution that fails its goal test is reported",
     Effect.gen(function* () {
       const check = yield* ContentCheck
-      const bad = yield* withFiles(concepts[0], { "solution.ts": "starter.ts" })
+      const bad = yield* withFiles(concepts[0], {
+        "solution.ts": "starter.ts",
+      })
       assert.deepStrictEqual(yield* check.check(bad), [
         "the solution fails its goal test",
       ])

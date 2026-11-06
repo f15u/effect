@@ -7,5 +7,8 @@ export class TutorError extends Data.TaggedError("TutorError")<{
     | "MissingFile"
     | "InstallFailed"
     | "BadFolder"
+    | "MissingCommand"
+    | "SolutionLocked"
+    | "NotYet"
   readonly message: string
 }> {}

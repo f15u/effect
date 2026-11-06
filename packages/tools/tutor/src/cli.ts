@@ -14,6 +14,7 @@ import * as Flag from "effect/cli/Flag"
 import * as GlobalFlag from "effect/cli/GlobalFlag"
 import * as Commands from "./Commands.ts"
 import type { TutorError } from "./TutorError.ts"
+import { Checker } from "./Checker.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { Process } from "./Process.ts"
 import { Progress } from "./Progress.ts"
@@ -55,16 +56,47 @@ const modeCommand = Command.make("mode", {
   ),
 )
 
+const checkCommand = Command.make("check").pipe(
+  Command.withDescription("Run the goal test on the learner's file"),
+  Command.withHandler(() => shell("check", Commands.check)),
+)
+
+const hintCommand = Command.make("hint").pipe(
+  Command.withDescription("Give the next hint"),
+  Command.withHandler(() => shell("hint", Commands.hint)),
+)
+
+const solutionCommand = Command.make("solution", {
+  said: Flag.String("said").pipe(Flag.withDefault("")),
+}).pipe(
+  Command.withDescription("Show the solution when it is unlocked"),
+  Command.withHandler(({ said }) => shell("solution", Commands.solution(said))),
+)
+
+const resetCommand = Command.make("reset").pipe(
+  Command.withDescription("Restore the starter file"),
+  Command.withHandler(() => shell("reset", Commands.reset)),
+)
+
 export const command = Command.make("tutor").pipe(
   Command.withDescription("Learn Effect with an AI tutor"),
   Command.withHandler(() => shell("status", Commands.status)),
-  Command.withSubcommands([statusCommand, goalCommand, modeCommand]),
+  Command.withSubcommands([
+    statusCommand,
+    goalCommand,
+    modeCommand,
+    checkCommand,
+    hintCommand,
+    solutionCommand,
+    resetCommand,
+  ]),
 )
 
 const MainLayer = Layer.mergeAll(
   Progress.layer,
   Curriculum.layer,
   Process.layer,
+  Checker.layer,
 ).pipe(
   Layer.provideMerge(
     Layer.mergeAll(

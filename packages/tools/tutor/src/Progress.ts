@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema"
 
 export const stateFile = ".effect-tutor.json"
 
-export const Phase = Schema.Literals(["Menu", "ChoosingMode"])
+export const Phase = Schema.Literals(["Menu", "ChoosingMode", "Working"])
 export type Phase = typeof Phase.Type
 
 export const Level = Schema.Literals(["Proved", "Explained"])
@@ -16,6 +16,8 @@ export const State = Schema.Struct({
   phase: Phase,
   goal: Schema.String,
   path: Schema.Array(Schema.String),
+  exercise: Schema.String,
+  hints: Schema.Number,
   evidence: Schema.Record(Schema.String, Level),
 })
 export type State = typeof State.Type
@@ -24,6 +26,8 @@ export const emptyState: State = {
   phase: "Menu",
   goal: "",
   path: [],
+  exercise: "",
+  hints: 0,
   evidence: {},
 }
 

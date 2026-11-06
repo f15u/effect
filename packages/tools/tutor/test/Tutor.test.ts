@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
+import * as FileSystem from "effect/FileSystem"
 import { allows, commandNames, machine } from "../src/Machine.ts"
 import type { Phase } from "../src/Progress.ts"
 import * as NodeFs from "node:fs"
@@ -24,7 +25,7 @@ describe("status in an empty folder", () => {
   live(
     "shows the goals and what to do next, and writes no file",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const r = yield* s.t("status")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, "See every way my code can fail")
@@ -39,7 +40,7 @@ describe("the first write", () => {
   live(
     "names the state file and says why, then writes it",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const r = yield* s.t("goal", "tagged-errors")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, ".effect-tutor.json")
@@ -53,7 +54,7 @@ describe("the first write", () => {
   live(
     "the notice comes once, not on later writes",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       const second = yield* s.t("status")
       assert.notInclude(second.out, "now writes")
@@ -65,7 +66,7 @@ describe("a goal and its path", () => {
   live(
     "a goal built on another concept gives the path in order",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const r = yield* s.t("goal", "catch-a-defect")
       assert.strictEqual(r.code, 0)
       const first = r.out.indexOf("Errors that TypeScript can tell apart")
@@ -81,13 +82,15 @@ describe("evidence and the path", () => {
   live(
     "a concept with evidence is left out of the path",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.write(
         ".effect-tutor.json",
         JSON.stringify({
           phase: "Menu",
           goal: "",
           path: [],
+          exercise: "",
+          hints: 0,
           evidence: { "tagged-errors": "Proved" },
         }),
       )
@@ -103,7 +106,7 @@ describe("the menu", () => {
   live(
     "lists goals in plain words and hides a finished goal",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const fresh = yield* s.t("status")
       assert.include(
         fresh.out,
@@ -115,6 +118,8 @@ describe("the menu", () => {
           phase: "Menu",
           goal: "",
           path: [],
+          exercise: "",
+          hints: 0,
           evidence: { "catch-a-defect": "Explained" },
         }),
       )
@@ -129,7 +134,7 @@ describe("refusals", () => {
   live(
     "every command a phase does not list is refused with what to do",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const refused = yield* s.t("mode", "exercise")
       assert.strictEqual(refused.code, 1)
       assert.include(refused.out, "Not now.")
@@ -145,7 +150,7 @@ describe("refusals", () => {
   live(
     "an unknown goal is refused and writes nothing",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       const r = yield* s.t("goal", "nope")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "Unknown goal")
@@ -163,17 +168,25 @@ describe("the transition table", () => {
   > = {
     Menu: () => Effect.void,
     ChoosingMode: (t) => t("goal", "tagged-errors"),
+    Working: (t) =>
+      t("goal", "tagged-errors").pipe(
+        Effect.andThen(t("mode", "exercise", "practice")),
+      ),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
     goal: ["tagged-errors"],
     mode: ["exercise"],
+    check: [],
+    hint: [],
+    solution: [],
+    reset: [],
   }
 
-  for (const phase of Object.keys(machine) as Array<Phase>) {
+  for (const phase of Object.keys(reach) as Array<Phase>) {
     live(
-      `${phase === "Menu" ? "the first step" : "after a goal"} refuses every command its row does not list and shows every one it does`,
+      `${phase === "Menu" ? "the first step" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
       Effect.gen(function* () {
-        const s = yield* session
+        const s = yield* session()
         yield* reach[phase](s.t)
         for (const name of commandNames.filter((n) => !allows(phase, n))) {
           const r = yield* s.t(name, ...dummy[name]!)
@@ -192,7 +205,7 @@ describe("exercise mode", () => {
   live(
     "writes nothing until the learner names a folder",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       const r = yield* s.t("mode", "exercise")
       assert.strictEqual(r.code, 0)
@@ -205,7 +218,7 @@ describe("exercise mode", () => {
   live(
     "writes the starter, package.json and tsconfig.json in the named folder and says why",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       const r = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(r.code, 0)
@@ -223,7 +236,7 @@ describe("exercise mode", () => {
   live(
     "never overwrites a file and says it kept it",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       yield* s.t("mode", "exercise", "practice")
       yield* s.write("practice/main.ts", "my work")
@@ -245,7 +258,7 @@ describe("exercise mode", () => {
   live(
     "a parent package.json with effect gets only the starter file and no install",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.write(
         "package.json",
         JSON.stringify({ dependencies: { effect: "^4.0.0" } }),
@@ -268,7 +281,7 @@ describe("exercise mode", () => {
   live(
     "a package.json with effect in the folder itself gets only the starter file",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.write(
         "practice/package.json",
         JSON.stringify({ devDependencies: { effect: "^4.0.0" } }),
@@ -287,7 +300,7 @@ describe("exercise mode", () => {
   live(
     "installs effect and typescript only when the yes flag is passed, and says so",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       const no = yield* s.t("mode", "exercise", "practice")
       assert.strictEqual(yield* s.installs, "")
@@ -305,12 +318,159 @@ describe("exercise mode", () => {
   live(
     "refuses a folder outside the current folder and writes nothing",
     Effect.gen(function* () {
-      const s = yield* session
+      const s = yield* session()
       yield* s.t("goal", "tagged-errors")
       const r = yield* s.t("mode", "exercise", "../escape")
       assert.strictEqual(r.code, 1)
       assert.include(r.out, "relative path")
       assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+    }),
+  )
+})
+
+describe("a missing npm", () => {
+  live(
+    "refuses the install with a clear message and does not crash",
+    Effect.gen(function* () {
+      const s = yield* session({ npm: false })
+      yield* s.t("goal", "tagged-errors")
+      const r = yield* s.t("mode", "exercise", "practice", "--install")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, "npm")
+      assert.match(r.out, /not found|not installed/)
+      assert.notInclude(r.out, "at ")
+    }),
+  )
+})
+
+const solution = NodeFs.readFileSync(
+  new URL("../src/concepts/tagged-errors/solution.ts", import.meta.url),
+  "utf8",
+)
+
+const working = (goal = "tagged-errors") =>
+  Effect.gen(function* () {
+    const s = yield* session()
+    yield* s.t("goal", goal)
+    yield* s.t("mode", "exercise", "practice")
+    return s
+  })
+
+describe("check", () => {
+  live(
+    "after the folder is chosen, status names the exercise file",
+    Effect.gen(function* () {
+      const s = yield* working()
+      const r = yield* s.t("status")
+      assert.include(r.out, "practice/main.ts")
+    }),
+  )
+
+  live(
+    "a passing check records proved and moves to the next concept",
+    Effect.gen(function* () {
+      const s = yield* working("catch-a-defect")
+      yield* s.write("practice/main.ts", solution)
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.include(r.out, "PASSED")
+      assert.include(r.out, "tutor mode project")
+      assert.notInclude(r.out, "tutor check")
+      assert.include(
+        yield* s.read(".effect-tutor.json"),
+        '"tagged-errors":"Proved"',
+      )
+    }),
+  )
+
+  live(
+    "a passing check on the last concept returns to the goal menu",
+    Effect.gen(function* () {
+      const s = yield* working()
+      yield* s.write("practice/main.ts", solution)
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 0, r.out)
+      assert.include(r.out, "tutor goal")
+    }),
+  )
+
+  live(
+    "a failing check records nothing and shows the failure",
+    Effect.gen(function* () {
+      const s = yield* working()
+      const before = yield* s.read(".effect-tutor.json")
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, "NOT YET")
+      assert.include(r.out, "tutor check")
+      assert.strictEqual(yield* s.read(".effect-tutor.json"), before)
+    }),
+  )
+
+  live(
+    "a check with no exercise file is refused and says where the file belongs",
+    Effect.gen(function* () {
+      const s = yield* working()
+      const fs = yield* FileSystem.FileSystem
+      yield* fs.remove(`${s.dir}/practice/main.ts`)
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, "practice/main.ts")
+    }),
+  )
+})
+
+const hints = [
+  "Compare what the three classes extend. What does Data.TaggedError add that Error does not?",
+  'Import Data from "effect". Replace `extends Error` with `extends Data.TaggedError("<tag>")`. The call takes the tag as a string.',
+  'The tag equals the class name, for example `class NetworkError extends Data.TaggedError("NetworkError") {}`. Do the same for the other two classes.',
+]
+
+describe("hints and the solution", () => {
+  live(
+    "hints come in ladder order and the solution is refused before they are used",
+    Effect.gen(function* () {
+      const s = yield* working()
+      const first = yield* s.t("hint")
+      assert.strictEqual(first.code, 0)
+      assert.include(first.out, hints[0])
+      assert.notInclude(first.out, hints[1])
+      const locked = yield* s.t("solution")
+      assert.strictEqual(locked.code, 1)
+      assert.notInclude(locked.out, "Data.TaggedError(")
+      assert.include(locked.out, "tutor hint")
+      const second = yield* s.t("hint")
+      assert.include(second.out, hints[1])
+      yield* s.t("hint")
+      const none = yield* s.t("hint")
+      assert.include(none.out, "No more hints")
+      const open = yield* s.t("solution")
+      assert.strictEqual(open.code, 0)
+      assert.include(open.out, 'extends Data.TaggedError("ExpiredCardError")')
+    }),
+  )
+
+  live(
+    "the solution unlocks when the learner asks in their own words",
+    Effect.gen(function* () {
+      const s = yield* working()
+      const r = yield* s.t("solution", "--said", "just show me")
+      assert.strictEqual(r.code, 0)
+      assert.include(r.out, 'extends Data.TaggedError("NetworkError")')
+    }),
+  )
+
+  live(
+    "reset restores the starter and clears the hints",
+    Effect.gen(function* () {
+      const s = yield* working()
+      yield* s.t("hint")
+      yield* s.write("practice/main.ts", "my work")
+      const r = yield* s.t("reset")
+      assert.strictEqual(r.code, 0)
+      assert.strictEqual(yield* s.read("practice/main.ts"), starter)
+      const again = yield* s.t("hint")
+      assert.include(again.out, hints[0])
     }),
   )
 })

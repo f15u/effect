@@ -37,6 +37,31 @@ const tsconfig = JSON.stringify({
 
 const marker = "TUTOR_RESULT "
 
+export const renderCheck = (result: CheckResult): ReadonlyArray<string> => {
+  switch (result._tag) {
+    case "Passed":
+      return ["PASSED", ...result.cases.map((item) => `  ok   ${item.name}`)]
+    case "TypeErrors":
+      return [
+        "TYPE ERRORS",
+        ...result.lines.map((line) => `  ${line}`),
+        "Ask the learner what the first error means. Do not fix it.",
+      ]
+    case "TestsFailed":
+      return [
+        "NOT YET",
+        ...result.cases.map((item) =>
+          item.passed
+            ? `  ok   ${item.name}`
+            : `  FAIL ${item.name}${item.message === undefined ? "" : `\n         ${item.message}`}`,
+        ),
+        "Ask the learner a question about the first failure. Do not fix it.",
+      ]
+    case "Crashed":
+      return ["NOT YET: the file crashed.", result.message]
+  }
+}
+
 export class Checker extends Context.Service<
   Checker,
   {
