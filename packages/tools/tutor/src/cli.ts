@@ -13,6 +13,7 @@ import * as Command from "effect/cli/Command"
 import * as GlobalFlag from "effect/cli/GlobalFlag"
 import * as Commands from "./Commands.ts"
 import type { TutorError } from "./TutorError.ts"
+import { Curriculum } from "./Curriculum.ts"
 import { Progress } from "./Progress.ts"
 
 class Failed extends Data.TaggedError("Failed")<{}> {}
@@ -54,7 +55,7 @@ export const command = Command.make("tutor").pipe(
   Command.withSubcommands([statusCommand, goalCommand, modeCommand]),
 )
 
-const MainLayer = Progress.layer.pipe(
+const MainLayer = Layer.mergeAll(Progress.layer, Curriculum.layer).pipe(
   Layer.provideMerge(
     Layer.mergeAll(
       CliConfig.layer({ builtIns: [GlobalFlag.Help] }),

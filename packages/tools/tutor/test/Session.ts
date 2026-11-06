@@ -49,5 +49,8 @@ export const session = Effect.gen(function* () {
   const files = fs.readDirectory(dir)
   const read = (file: string) => fs.readFileString(path.join(dir, file))
 
-  return { dir, t, files, read }
+  const write = (file: string, content: string) =>
+    fs.writeFileString(path.join(dir, file), content)
+
+  return { dir, t, files, read, write }
 })

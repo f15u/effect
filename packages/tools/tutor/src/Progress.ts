@@ -9,13 +9,23 @@ export const stateFile = ".effect-tutor.json"
 export const Phase = Schema.Literals(["Menu", "ChoosingMode"])
 export type Phase = typeof Phase.Type
 
+export const Level = Schema.Literals(["Proved", "Explained"])
+export type Level = typeof Level.Type
+
 export const State = Schema.Struct({
   phase: Phase,
   goal: Schema.String,
+  path: Schema.Array(Schema.String),
+  evidence: Schema.Record(Schema.String, Level),
 })
 export type State = typeof State.Type
 
-export const emptyState: State = { phase: "Menu", goal: "" }
+export const emptyState: State = {
+  phase: "Menu",
+  goal: "",
+  path: [],
+  evidence: {},
+}
 
 const Json = Schema.fromJsonString(State)
 

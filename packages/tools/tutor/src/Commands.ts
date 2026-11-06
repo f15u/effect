@@ -2,7 +2,7 @@ import * as Cause from "effect/Cause"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
-import { goals } from "./Goals.ts"
+import { Curriculum } from "./Curriculum.ts"
 import { allows, youCanNow } from "./Machine.ts"
 import { Progress, stateFile, type State } from "./Progress.ts"
 import { TutorError } from "./TutorError.ts"
@@ -15,14 +15,20 @@ export interface Output {
 const bullet = (items: ReadonlyArray<string>) =>
   items.map((item) => `  - ${item}`).join("\n")
 
-const instruction = (state: State): string => {
-  switch (state.phase) {
-    case "Menu":
-      return `Show the learner these goals in plain words. Ask which one they want.\n${bullet(goals.map((goal) => `${goal.id}: ${goal.title}`))}`
-    case "ChoosingMode":
-      return "Ask the learner: practise with a small exercise, or in their own project?"
-  }
-}
+const instruction = (state: State) =>
+  Effect.gen(function* () {
+    switch (state.phase) {
+      case "Menu": {
+        const curriculum = yield* Curriculum
+        const open = curriculum.goals.filter(
+          (item) => state.evidence[item.id] === undefined,
+        )
+        return `Show the learner these goals in plain words. Ask which one they want.\n${bullet(open.map((item) => `${item.id}: ${item.goal}`))}`
+      }
+      case "ChoosingMode":
+        return "Ask the learner: practise with a small exercise, or in their own project?"
+    }
+  })
 
 export const execute = <E, R>(
   name: string,
@@ -43,13 +49,13 @@ export const execute = <E, R>(
     if (Exit.isSuccess(exit)) {
       lines.push(...exit.value)
       if (after.phase !== before.phase || name === "status")
-        lines.push(instruction(after))
+        lines.push(yield* instruction(after))
     } else {
       const error = Cause.findError(exit.cause)
       if (error._tag === "Success" && error.success instanceof TutorError) {
         lines.push(error.success.message)
         if (error.success.reason === "WrongPhase")
-          lines.push(instruction(after))
+          lines.push(yield* instruction(after))
       } else {
         lines.push(Cause.pretty(exit.cause))
       }
@@ -62,13 +68,12 @@ export const status = Effect.succeed<ReadonlyArray<string>>([])
 
 export const goal = (id: string) =>
   Effect.gen(function* () {
-    const picked = goals.find((item) => item.id === id)
-    if (picked === undefined)
-      return yield* new TutorError({
-        reason: "UnknownGoal",
-        message: `Unknown goal "${id}". Use one of: ${goals.map((item) => item.id).join(", ")}.`,
-      })
+    const curriculum = yield* Curriculum
+    yield* curriculum.validateGoals([id])
+    const picked = curriculum.concept(id)
     const progress = yield* Progress
+    const known = new Set(Object.keys((yield* progress.read).evidence))
+    const path = curriculum.path([id], known)
     if (!(yield* progress.exists))
       yield* Console.log(
         `The tutor now writes ${stateFile} in this folder. It keeps the learner's progress so it survives a closed agent.`,
@@ -77,6 +82,10 @@ export const goal = (id: string) =>
       ...state,
       phase: "ChoosingMode",
       goal: picked.id,
+      path: path.map((item) => item.id),
     }))
-    return [`Goal: ${picked.title}.`]
+    return [
+      `Goal: ${picked.goal}.`,
+      `Path:\n${bullet(path.map((item) => item.title))}`,
+    ]
   })

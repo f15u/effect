@@ -1,0 +1,113 @@
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as FileSystem from "effect/FileSystem"
+import * as Layer from "effect/Layer"
+import * as Path from "effect/Path"
+import * as Schema from "effect/Schema"
+import { Process } from "./Process.ts"
+
+const Case = Schema.Struct({
+  name: Schema.String,
+  passed: Schema.Boolean,
+  message: Schema.optionalKey(Schema.String),
+})
+export type Case = typeof Case.Type
+
+const Cases = Schema.fromJsonString(Schema.Array(Case))
+
+export type CheckResult =
+  | { readonly _tag: "Passed"; readonly cases: ReadonlyArray<Case> }
+  | { readonly _tag: "TypeErrors"; readonly lines: ReadonlyArray<string> }
+  | { readonly _tag: "TestsFailed"; readonly cases: ReadonlyArray<Case> }
+  | { readonly _tag: "Crashed"; readonly message: string }
+
+const tsconfig = JSON.stringify({
+  compilerOptions: {
+    strict: true,
+    noEmit: true,
+    target: "es2022",
+    module: "nodenext",
+    moduleResolution: "nodenext",
+    skipLibCheck: true,
+    allowImportingTsExtensions: true,
+    types: ["node"],
+  },
+  files: ["main.ts"],
+})
+
+const marker = "TUTOR_RESULT "
+
+export class Checker extends Context.Service<
+  Checker,
+  {
+    readonly run: (test: string, source: string) => Effect.Effect<CheckResult>
+  }
+>()("tutor/Checker", {
+  make: Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const process = yield* Process
+    const src = import.meta.dirname
+    const scratch = path.resolve(src, "../.tmp")
+    const tsc = path.resolve(src, "../../../node_modules/typescript/bin/tsc")
+    const shim = path.resolve(src, "tutorial-test.mjs")
+
+    const prepareTest = (test: string) =>
+      test
+        .replace(`"tutorial-test"`, JSON.stringify(shim))
+        .replace(`"./main"`, `"./main.ts"`)
+
+    const run = Effect.fn("Checker.run")(
+      function* (test: string, source: string) {
+        yield* fs.makeDirectory(scratch, { recursive: true })
+        const dir = yield* fs.makeTempDirectoryScoped({
+          directory: scratch,
+          prefix: "check-",
+        })
+        yield* fs.writeFileString(path.join(dir, "main.ts"), source)
+        yield* fs.writeFileString(
+          path.join(dir, "main.test.ts"),
+          prepareTest(test),
+        )
+        yield* fs.writeFileString(path.join(dir, "tsconfig.json"), tsconfig)
+
+        const types = yield* process.execute("node", [tsc, "-p", "."], dir)
+        if (types.exitCode !== 0) {
+          const lines = types.stdout
+            .split("\n")
+            .filter((line) => line.includes("error TS"))
+          return { _tag: "TypeErrors", lines } as const
+        }
+
+        const tests = yield* process.execute(
+          "node",
+          ["--no-warnings", "main.test.ts"],
+          dir,
+        )
+        const line = tests.stdout
+          .split("\n")
+          .find((candidate) => candidate.startsWith(marker))
+        if (line === undefined) {
+          return {
+            _tag: "Crashed",
+            message: (tests.stderr || tests.stdout).trim().slice(0, 1500),
+          } as const
+        }
+        const cases = yield* Schema.decodeUnknownEffect(Cases)(
+          line.slice(marker.length),
+        )
+        return cases.every((item) => item.passed)
+          ? ({ _tag: "Passed", cases } as const)
+          : ({ _tag: "TestsFailed", cases } as const)
+      },
+      Effect.scoped,
+      Effect.orDie,
+    )
+
+    return { run }
+  }),
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.provide(Process.layer),
+  )
+}

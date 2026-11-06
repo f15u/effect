@@ -34,7 +34,7 @@ describe("the first write", () => {
     "names the state file and says why, then writes it",
     Effect.gen(function* () {
       const s = yield* session
-      const r = yield* s.t("goal", "see-every-failure")
+      const r = yield* s.t("goal", "tagged-errors")
       assert.strictEqual(r.code, 0)
       assert.include(r.out, ".effect-tutor.json")
       assert.match(r.out, /progress/)
@@ -48,9 +48,73 @@ describe("the first write", () => {
     "the notice comes once, not on later writes",
     Effect.gen(function* () {
       const s = yield* session
-      yield* s.t("goal", "see-every-failure")
+      yield* s.t("goal", "tagged-errors")
       const second = yield* s.t("status")
       assert.notInclude(second.out, "now writes")
+    }),
+  )
+})
+
+describe("a goal and its path", () => {
+  live(
+    "a goal built on another concept gives the path in order",
+    Effect.gen(function* () {
+      const s = yield* session
+      const r = yield* s.t("goal", "catch-a-defect")
+      assert.strictEqual(r.code, 0)
+      const first = r.out.indexOf("Errors that TypeScript can tell apart")
+      const second = r.out.indexOf(
+        "Containing an unexpected failure at a boundary",
+      )
+      assert.isTrue(first >= 0 && second > first, r.out)
+    }),
+  )
+})
+
+describe("evidence and the path", () => {
+  live(
+    "a concept with evidence is left out of the path",
+    Effect.gen(function* () {
+      const s = yield* session
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Menu",
+          goal: "",
+          path: [],
+          evidence: { "tagged-errors": "Proved" },
+        }),
+      )
+      const r = yield* s.t("goal", "catch-a-defect")
+      assert.strictEqual(r.code, 0)
+      assert.include(r.out, "Containing an unexpected failure at a boundary")
+      assert.notInclude(r.out, "Errors that TypeScript can tell apart")
+    }),
+  )
+})
+
+describe("the menu", () => {
+  live(
+    "lists goals in plain words and hides a finished goal",
+    Effect.gen(function* () {
+      const s = yield* session
+      const fresh = yield* s.t("status")
+      assert.include(
+        fresh.out,
+        "Keep a server alive when something unexpected breaks",
+      )
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Menu",
+          goal: "",
+          path: [],
+          evidence: { "catch-a-defect": "Explained" },
+        }),
+      )
+      const after = yield* s.t("status")
+      assert.include(after.out, "See every way my code can fail")
+      assert.notInclude(after.out, "Keep a server alive")
     }),
   )
 })
@@ -64,8 +128,8 @@ describe("refusals", () => {
       assert.strictEqual(refused.code, 1)
       assert.include(refused.out, "Not now.")
       assert.include(refused.out, "tutor goal")
-      yield* s.t("goal", "see-every-failure")
-      const again = yield* s.t("goal", "keep-server-alive")
+      yield* s.t("goal", "tagged-errors")
+      const again = yield* s.t("goal", "catch-a-defect")
       assert.strictEqual(again.code, 1)
       assert.include(again.out, "Not now.")
       assert.include(again.out, "tutor mode exercise")
@@ -92,10 +156,10 @@ describe("the transition table", () => {
     ) => Effect.Effect<unknown, any, any>
   > = {
     Menu: () => Effect.void,
-    ChoosingMode: (t) => t("goal", "see-every-failure"),
+    ChoosingMode: (t) => t("goal", "tagged-errors"),
   }
   const dummy: Record<string, ReadonlyArray<string>> = {
-    goal: ["see-every-failure"],
+    goal: ["tagged-errors"],
     mode: ["exercise"],
   }
 
