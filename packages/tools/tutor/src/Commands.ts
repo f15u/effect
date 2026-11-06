@@ -1,5 +1,4 @@
 import * as Cause from "effect/Cause"
-import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as FileSystem from "effect/FileSystem"
@@ -8,7 +7,7 @@ import * as Path from "effect/Path"
 import { Checker, renderCheck } from "./Checker.ts"
 import { materialize } from "./Exercise.ts"
 import { Curriculum } from "./Curriculum.ts"
-import { allows, youCanNow } from "./Machine.ts"
+import { allows, youCanNow, type Surface } from "./Machine.ts"
 import { Progress, stateFile, type State } from "./Progress.ts"
 import { TutorError } from "./TutorError.ts"
 
@@ -43,6 +42,7 @@ const instruction = (state: State) =>
 export const execute = <E, R>(
   name: string,
   handler: Effect.Effect<ReadonlyArray<string>, E | TutorError, R>,
+  surface: Surface = "shell",
 ) =>
   Effect.gen(function* () {
     const progress = yield* Progress
@@ -70,7 +70,7 @@ export const execute = <E, R>(
         lines.push(Cause.pretty(exit.cause))
       }
     }
-    lines.push(youCanNow(after.phase))
+    lines.push(youCanNow(after.phase, surface))
     return {
       text: lines.join("\n"),
       ok: Exit.isSuccess(exit),
@@ -87,10 +87,11 @@ export const goal = (id: string) =>
     const progress = yield* Progress
     const known = new Set(Object.keys((yield* progress.read).evidence))
     const path = curriculum.path([id], known)
-    if (!(yield* progress.exists))
-      yield* Console.log(
-        `The tutor now writes ${stateFile} in this folder. It keeps the learner's progress so it survives a closed agent.`,
-      )
+    const notice = (yield* progress.exists)
+      ? []
+      : [
+          `The tutor now writes ${stateFile} in this folder. It keeps the learner's progress so it survives a closed agent.`,
+        ]
     yield* progress.update((state) => ({
       ...state,
       phase: "ChoosingMode",
@@ -98,6 +99,7 @@ export const goal = (id: string) =>
       path: path.map((item) => item.id),
     }))
     return [
+      ...notice,
       `Goal: ${picked.goal}.`,
       `Path:\n${bullet(path.map((item) => item.title))}`,
     ]
@@ -107,6 +109,7 @@ export const mode = (
   choice: string,
   folder: Option.Option<string>,
   install: boolean,
+  surface: Surface = "shell",
 ) =>
   Effect.gen(function* () {
     if (choice !== "exercise") return []
@@ -114,7 +117,9 @@ export const mode = (
       return [
         "No file is written yet. Ask the learner for the exercise folder name. Suggest none.",
         "Say what the tool will write: the starter file, and a package.json and tsconfig.json so the editor shows types.",
-        "Ask if the tool may install effect and typescript. Then run: tutor mode exercise <folder> [--install]",
+        surface === "mcp"
+          ? "Ask if the tool may install effect and typescript. Then call tutor_mode with mode exercise, the folder, and install true after a yes."
+          : "Ask if the tool may install effect and typescript. Then run: tutor mode exercise <folder> [--install]",
       ]
     if (/^\/|(^|\/)\.\.(\/|$)/.test(folder.value))
       return yield* new TutorError({
@@ -127,6 +132,7 @@ export const mode = (
       folder.value,
       curriculum.concept(state.path[0]!),
       install,
+      surface,
     )
     yield* (yield* Progress).update((current) => ({
       ...current,
@@ -154,7 +160,7 @@ export const check = Effect.gen(function* () {
       () =>
         new TutorError({
           reason: "MissingFile",
-          message: `Cannot read ${file}. Ask the learner to put the exercise file back, or run: tutor reset`,
+          message: `Cannot read ${file}. Ask the learner to put the exercise file back, or restore the starter file.`,
         }),
     ),
   )

@@ -16,6 +16,7 @@ import * as Commands from "./Commands.ts"
 import type { TutorError } from "./TutorError.ts"
 import { Checker } from "./Checker.ts"
 import { Curriculum } from "./Curriculum.ts"
+import { McpLive } from "./mcp.ts"
 import { Process } from "./Process.ts"
 import { Progress } from "./Progress.ts"
 
@@ -78,6 +79,11 @@ const resetCommand = Command.make("reset").pipe(
   Command.withHandler(() => shell("reset", Commands.reset)),
 )
 
+const mcpCommand = Command.make("mcp").pipe(
+  Command.withDescription("Run as an MCP server over stdio"),
+  Command.withHandler(() => Layer.launch(McpLive)),
+)
+
 export const command = Command.make("tutor").pipe(
   Command.withDescription("Learn Effect with an AI tutor"),
   Command.withHandler(() => shell("status", Commands.status)),
@@ -89,6 +95,7 @@ export const command = Command.make("tutor").pipe(
     hintCommand,
     solutionCommand,
     resetCommand,
+    mcpCommand,
   ]),
 )
 

@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Path from "effect/Path"
 import type { Concept } from "./Concept.ts"
+import type { Surface } from "./Machine.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { Process } from "./Process.ts"
 import { TutorError } from "./TutorError.ts"
@@ -58,6 +59,7 @@ export const materialize = (
   folder: string,
   concept: Concept,
   install: boolean,
+  surface: Surface = "shell",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -110,7 +112,7 @@ export const materialize = (
         )
       } else {
         lines.push(
-          `Nothing is installed. Ask the learner if the tool may install effect and typescript. After a yes, run: tutor mode exercise ${folder} --install`,
+          `Nothing is installed. Ask the learner if the tool may install effect and typescript. After a yes, ${surface === "mcp" ? `call tutor_mode with mode exercise, folder ${folder} and install true` : `run: tutor mode exercise ${folder} --install`}.`,
         )
       }
     }

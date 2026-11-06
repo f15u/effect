@@ -1,7 +1,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
+import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Path from "effect/Path"
+import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
@@ -86,3 +88,81 @@ export const session = (options: { readonly npm?: boolean } = {}) =>
 
     return { dir, t, files, nested, read, write, installs }
   })
+
+export const mcpSession = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-mcp-" })
+  const cli = path.resolve(import.meta.dirname, "../src/cli.ts")
+  const inbox = yield* Queue.unbounded<Uint8Array>()
+  const encoder = new TextEncoder()
+  const pending = new Map<number, Deferred.Deferred<any>>()
+  let nextId = 1
+
+  const send = (message: unknown) =>
+    Queue.offer(inbox, encoder.encode(`${JSON.stringify(message)}\n`))
+
+  const handle = yield* spawner.spawn(
+    ChildProcess.make(process.execPath, ["--no-warnings", cli, "mcp"], {
+      cwd: dir,
+      stdin: Stream.fromQueue(inbox),
+    }),
+  )
+
+  yield* handle.stdout.pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+    Stream.runForEach((line) =>
+      Effect.gen(function* () {
+        if (line.trim() === "") return
+        const message = JSON.parse(line)
+        const waiting = pending.get(message.id)
+        if (waiting === undefined) return
+        pending.delete(message.id)
+        yield* Deferred.succeed(waiting, message)
+      }),
+    ),
+    Effect.forkScoped,
+  )
+
+  const call = (method: string, params: unknown) =>
+    Effect.gen(function* () {
+      const id = nextId++
+      const deferred = yield* Deferred.make<any>()
+      pending.set(id, deferred)
+      yield* send({ jsonrpc: "2.0", id, method, params })
+      return yield* Deferred.await(deferred)
+    })
+
+  const init = yield* call("initialize", {
+    protocolVersion: "2025-11-25",
+    capabilities: {},
+    clientInfo: { name: "test", version: "0" },
+  })
+  yield* send({ jsonrpc: "2.0", method: "notifications/initialized" })
+
+  const tool = (name: string, args: Record<string, unknown> = {}) =>
+    call("tools/call", { name, arguments: args }).pipe(
+      Effect.map((response) => ({
+        out: response.result.content[0].text as string,
+        isError: response.result.isError === true,
+      })),
+      Effect.flatMap(clean),
+    )
+
+  const tools = call("tools/list", {}).pipe(
+    Effect.map((response) =>
+      response.result.tools.map((item: any) => item.name as string),
+    ),
+  )
+
+  const files = fs.readDirectory(dir)
+  const read = (file: string) => fs.readFileString(path.join(dir, file))
+  const write = (file: string, content: string) =>
+    fs
+      .makeDirectory(path.dirname(path.join(dir, file)), { recursive: true })
+      .pipe(Effect.andThen(fs.writeFileString(path.join(dir, file), content)))
+
+  return { dir, init, tool, tools, files, read, write }
+})
