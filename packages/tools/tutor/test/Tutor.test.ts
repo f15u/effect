@@ -456,6 +456,20 @@ describe("check", () => {
   )
 
   live(
+    "the last concept ends the goal at once and the list hides the finished goal",
+    Effect.gen(function* () {
+      const s = yield* working()
+      yield* s.write("practice/main.ts", solution)
+      const r = yield* s.t("check")
+      assert.include(r.out, "The goal is reached")
+      assert.notInclude(r.out, "tutor replay")
+      assert.notInclude(r.out, "tagged-errors:")
+      assert.include(r.out, "catch-a-defect:")
+      assert.include(r.out, "tutor goal")
+    }),
+  )
+
+  live(
     "a failing check records nothing and shows the failure",
     Effect.gen(function* () {
       const s = yield* working()

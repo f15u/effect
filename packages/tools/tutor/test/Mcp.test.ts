@@ -343,3 +343,33 @@ describe("tutor mcp probe", () => {
     }),
   )
 })
+
+describe("tutor mcp replay", () => {
+  live(
+    "an answered replay on a trusted session goes to the next probe",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({ capabilities: canAsk })
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Replaying",
+          goal: "catch-a-defect",
+          path: ["tagged-errors", "catch-a-defect"],
+          exercise: "",
+          hints: 0,
+          evidence: { "tagged-errors": "Proved" },
+          trusted: true,
+        }),
+      )
+      assert.include(yield* s.tools, "tutor_replay")
+      const bad = yield* s.tool("tutor_replay", { how: "later" })
+      assert.isTrue(bad.isError)
+      const r = yield* s.tool("tutor_replay", { how: "answered" })
+      assert.isFalse(r.isError)
+      assert.include(r.out, "tutor_probe")
+      const state = yield* s.state
+      assert.strictEqual(state.phase, "Probing")
+      assert.deepStrictEqual(state.path, ["catch-a-defect"])
+    }),
+  )
+})

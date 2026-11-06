@@ -204,7 +204,12 @@ export const check = Effect.gen(function* () {
     hints: 0,
     evidence: { ...current.evidence, [concept.id]: "Proved" },
   }))
-  return lines
+  return last
+    ? [
+        ...lines,
+        "The goal is reached. Say so in one line. Ask for no confirmation.",
+      ]
+    : lines
 })
 export const replay = (how: string) =>
   Effect.gen(function* () {
