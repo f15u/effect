@@ -24,10 +24,6 @@ export const taggedErrors = defineConcept({
   },
   keyIdea:
     'A thrown error is invisible in the type: the catch variable is unknown. To put errors in the type, each error needs a unique tag, so TypeScript can tell the members of a union apart. Data.TaggedError("Name") gives each class a _tag.',
-  wrongBeliefs: [
-    "Three classes that extend Error are three different types. (They have the same shape, so TypeScript treats them as one.)",
-    "A try/catch tells the caller which errors can happen. (The catch variable is unknown.)",
-  ],
   hints: [
     "Compare what the three classes extend. What does Data.TaggedError add that Error does not?",
     'Import Data from "effect". Replace `extends Error` with `extends Data.TaggedError("<tag>")`. The call takes the tag as a string.',

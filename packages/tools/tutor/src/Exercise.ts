@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
+import * as Option from "effect/Option"
 import * as Path from "effect/Path"
+import * as Schema from "effect/Schema"
 import type { Concept } from "./Concept.ts"
 import type { Surface } from "./Machine.ts"
 import { Curriculum } from "./Curriculum.ts"
@@ -31,19 +33,26 @@ export const fileReasons = {
   "tsconfig.json": "so the editor shows types",
 } as const
 
-const hasEffect = (text: string) => {
-  try {
-    const pkg = JSON.parse(text) as Record<
-      string,
-      Record<string, unknown> | undefined
-    >
-    return ["dependencies", "devDependencies", "peerDependencies"].some(
-      (key) => pkg[key]?.effect !== undefined,
-    )
-  } catch {
-    return false
-  }
-}
+const Dependencies = Schema.optional(
+  Schema.Record(Schema.String, Schema.Unknown),
+)
+
+const PackageJson = Schema.fromJsonString(
+  Schema.Struct({
+    dependencies: Dependencies,
+    devDependencies: Dependencies,
+    peerDependencies: Dependencies,
+  }),
+)
+
+const hasEffect = (text: string) =>
+  Option.match(Schema.decodeUnknownOption(PackageJson)(text), {
+    onNone: () => false,
+    onSome: (pkg) =>
+      [pkg.dependencies, pkg.devDependencies, pkg.peerDependencies].some(
+        (group) => group?.effect !== undefined,
+      ),
+  })
 
 const findEffectProject = (folder: string) =>
   Effect.gen(function* () {

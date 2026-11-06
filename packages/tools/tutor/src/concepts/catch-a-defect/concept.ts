@@ -29,11 +29,6 @@ export const catchADefect = defineConcept({
   },
   keyIdea:
     "Expected errors go in the type, so a caller can recover. Bugs and broken invariants are defects: they stay out of the type and stop the computation. Only a boundary, such as an HTTP handler, contains them. Effect.catchDefect receives unknown, checks it at runtime, and sends unknown defects back with Effect.die.",
-  wrongBeliefs: [
-    "A defect should be a typed error that the caller handles.",
-    "catchDefect resumes the code after the defect. (It only gives the wrapped Effect a new outcome.)",
-    "catchDefect may swallow every defect. (It must send unknown ones back to Effect.die.)",
-  ],
   hints: [
     "Which Effect function runs a handler for defects only, and leaves expected errors alone?",
     "Pipe `self` into `Effect.catchDefect`. The handler receives `unknown`. How do you check the value is a DoubleCaptureError at runtime?",

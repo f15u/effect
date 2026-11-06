@@ -24,10 +24,6 @@ export const stopOnBrokenRule = defineConcept({
   },
   keyIdea:
     "Expected errors go in the Error type because a caller can recover. A broken rule is a defect: Effect.die stops the work, and the defect does not enter the Error type. Effect<A, never> can still stop with a defect.",
-  wrongBeliefs: [
-    "Every problem belongs in the Error type. (Only problems a caller can recover from do.)",
-    "The work can safely go on after a broken rule. (A broken rule must stop the work.)",
-  ],
   hints: [
     "The error should leave the type. Which Effect function stops the work with a defect?",
     "Wrap the error: `Effect.die(new DoubleCaptureError({ id: authorization.id }))`.",

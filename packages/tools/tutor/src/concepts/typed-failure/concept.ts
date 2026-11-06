@@ -24,10 +24,6 @@ export const typedFailure = defineConcept({
   },
   keyIdea:
     "Effect<Success, Error> puts the failures in the type. Write the function with Effect.fn, and use `return yield* new MyError()` where you would throw. Effect reads the error types from the body.",
-  wrongBeliefs: [
-    "A function type lists the errors the function throws. (TypeScript has no throws clause.)",
-    "A _tag on an error makes a thrown error show in the type. (Only a failure that Effect returns shows.)",
-  ],
   hints: [
     "A thrown error cannot show in a type. What type could carry both a result and a failure?",
     'Replace the async arrow with `Effect.fn(function* (token: PaymentToken) { ... })`. Import Effect from "effect".',

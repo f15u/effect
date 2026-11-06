@@ -832,3 +832,30 @@ describe("confirm on a project file", () => {
     }),
   )
 })
+
+describe("a broken progress file", () => {
+  live(
+    "is reported in words, not as a crash",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(".effect-tutor.json", "{ not json")
+      const r = yield* s.t("status")
+      assert.strictEqual(r.code, 1)
+      assert.include(r.out, ".effect-tutor.json")
+      assert.include(r.out, "cannot be read")
+      assert.notInclude(r.out, "    at ")
+    }),
+  )
+})
+
+describe("a bad argument", () => {
+  live(
+    "a mode or replay value outside the choices is refused",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.t("goal", "tagged-errors", "--write")
+      const mode = yield* s.t("mode", "sideways")
+      assert.strictEqual(mode.code, 1)
+    }),
+  )
+})

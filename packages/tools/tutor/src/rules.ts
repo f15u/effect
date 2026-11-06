@@ -11,8 +11,8 @@ export const tutorRules = `TUTOR RULES (follow always)
 10. Do not read the tutor's source files or concept folders.
 `
 
-export const agentInstructions = `# Effect tutor workspace
+export const agentInstructions = `# Effect tutor
 
 ${tutorRules}
-This folder is a tutor workspace. On the first message of a session, call tutor_status. Follow what it says. It always ends with what you can do now.
+This folder is the learning folder. On the first message of a session, call tutor_status. Follow what it says. It always ends with what you can do now.
 Tell the learner the exact path of any file to edit.`

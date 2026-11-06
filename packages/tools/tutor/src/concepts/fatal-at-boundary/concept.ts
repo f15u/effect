@@ -26,10 +26,6 @@ export const fatalAtBoundary = defineConcept({
   },
   keyIdea:
     "Effect.orDie turns every typed error into a defect, so the Error type becomes never. Call it where the job decides not to recover. The function's other callers still see the typed errors.",
-  wrongBeliefs: [
-    "To stop a job, the function itself must stop failing in the type. (The caller decides, with orDie.)",
-    "Typed errors are defects already. (They are separate until orDie or die turns one into the other.)",
-  ],
   hints: [
     "The job decides, not processPayment. Which Effect function turns typed errors into defects?",
     "Pipe the result of `processPayment(token)` into `Effect.orDie`.",

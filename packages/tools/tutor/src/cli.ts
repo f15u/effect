@@ -56,7 +56,7 @@ const probeCommand = Command.make("probe").pipe(
 )
 
 const modeCommand = Command.make("mode", {
-  mode: Argument.String("exercise|project"),
+  mode: Argument.Literals("exercise|project", Commands.Mode.literals),
   folder: Argument.String("folder").pipe(Argument.optional),
   install: Flag.Boolean("install").pipe(Flag.withDefault(false)),
 }).pipe(
@@ -72,7 +72,7 @@ const checkCommand = Command.make("check").pipe(
 )
 
 const replayCommand = Command.make("replay", {
-  how: Argument.String("answered|skipped"),
+  how: Argument.Literals("answered|skipped", Commands.Replay.literals),
 }).pipe(
   Command.withDescription(
     "Say if the learner answered the replay or skipped it",

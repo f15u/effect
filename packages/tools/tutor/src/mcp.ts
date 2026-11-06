@@ -24,14 +24,6 @@ const text = (output: Commands.Output) =>
     isError: !output.ok,
   })
 
-const field = (payload: unknown, key: string): unknown =>
-  (payload as Record<string, unknown> | undefined)?.[key]
-
-const string = (payload: unknown, key: string): string => {
-  const value = field(payload, key)
-  return typeof value === "string" ? value : ""
-}
-
 const folderForm = `Where should the exercise go? Type a folder name, relative to the current folder. The tool writes these files in it:\n${Object.entries(
   fileReasons,
 )
@@ -83,7 +75,7 @@ const askOwn = (file: string, quote: string) =>
     Effect.catchTag("ElicitationDeclined", () => Effect.succeed(false)),
   )
 
-const prop = (description: string, extra: Record<string, unknown> = {}) => ({
+const prop = (description: string, extra: Schema.JsonObject = {}) => ({
   type: "string",
   description,
   ...extra,
@@ -110,7 +102,7 @@ const pickGoal = Effect.gen(function* () {
       choice: Schema.Literals([
         ...open.map((item) => item.label),
         Commands.nothingForNow,
-      ] as unknown as [string, ...Array<string>]),
+      ]),
       words,
     }),
   }).pipe(
@@ -145,7 +137,7 @@ const askProbe = Effect.gen(function* () {
   const reply = yield* McpServer.elicit({
     message: prompt.message,
     schema: Schema.Struct({
-      choice: Schema.Literals(prompt.options as [string, ...Array<string>]),
+      choice: Schema.Literals(prompt.options),
       words,
     }),
   }).pipe(
@@ -161,44 +153,60 @@ const askProbe = Effect.gen(function* () {
   return yield* Commands.probe(reply)
 })
 
+type Needs =
+  | Curriculum
+  | Progress
+  | Checker
+  | Process
+  | FileSystem.FileSystem
+  | Path.Path
+  | McpSchema.McpRequestContext
+  | McpSchema.McpServerClient
+
+const NoArgs = Schema.Struct({})
+
 export const registerTools = Effect.gen(function* () {
   const server = yield* McpServer.McpServer
-  const services = yield* Effect.context<
-    | Curriculum
-    | Progress
-    | Checker
-    | Process
-    | FileSystem.FileSystem
-    | Path.Path
-  >()
+  const services =
+    yield* Effect.context<
+      Exclude<Needs, McpSchema.McpRequestContext | McpSchema.McpServerClient>
+    >()
 
-  const add = (
+  const add = <A>(
     name: string,
     description: string,
-    properties: Record<string, Record<string, unknown>>,
+    properties: Readonly<Record<string, Schema.JsonObject>>,
     required: ReadonlyArray<string>,
-    run: (payload: unknown) => Effect.Effect<Commands.Output, never, any>,
+    args: Schema.Decoder<A>,
+    run: (args: A) => Effect.Effect<Commands.Output, never, Needs>,
   ) =>
     server.addTool({
       tool: new McpSchema.Tool({
         name: `tutor_${name}`,
         description,
-        inputSchema: {
-          type: "object",
-          properties: properties as any,
-          required,
-        },
+        inputSchema: { type: "object", properties, required },
       }),
       annotations: Context.empty(),
       handle: (payload) =>
-        run(payload).pipe(
+        Schema.decodeUnknownEffect(args)(payload ?? {}).pipe(
+          Effect.matchEffect({
+            onFailure: (error) =>
+              Effect.succeed<Commands.Output>({
+                text: `The arguments are not valid: ${error.message}`,
+                ok: false,
+              }),
+            onSuccess: run,
+          }),
           Effect.map(text),
-          Effect.provideContext(services as Context.Context<any>),
-        ) as Effect.Effect<
-          McpSchema.CallToolResult,
-          never,
-          McpSchema.McpRequestContext
-        >,
+          Effect.provideContext(services),
+          // McpServer types omit McpServerClient from handler services, but the server provides it per call
+          (effect) =>
+            effect as Effect.Effect<
+              McpSchema.CallToolResult,
+              never,
+              McpSchema.McpRequestContext
+            >,
+        ),
     })
 
   const via = <E, R>(
@@ -211,6 +219,7 @@ export const registerTools = Effect.gen(function* () {
     "Shows what to do next. Call it first in a session.",
     {},
     [],
+    NoArgs,
     () => via("status", Commands.status),
   )
   yield* add(
@@ -230,18 +239,21 @@ export const registerTools = Effect.gen(function* () {
       },
     },
     [],
-    (payload) =>
+    Schema.Struct({
+      goals: Schema.optionalKey(Schema.Array(Schema.String)),
+      write: Schema.optionalKey(Schema.Boolean),
+    }),
+    (args) =>
       Effect.gen(function* () {
         const canAsk =
           (yield* McpServer.clientCapabilities).elicitation !== undefined
-        const goals = field(payload, "goals")
-        const given = Array.isArray(goals) ? String(goals[0] ?? "") : ""
+        const given = args.goals?.[0] ?? ""
         return yield* via(
           "goal",
           canAsk
             ? pickGoal
             : Commands.goal(given, {
-                write: field(payload, "write") === true,
+                write: args.write === true,
                 surface: "mcp",
               }),
         )
@@ -252,6 +264,7 @@ export const registerTools = Effect.gen(function* () {
     "Shows the learner one single-choice question in a picker. The learner picks; the server records it. Takes no argument. Never describe the options.",
     {},
     [],
+    NoArgs,
     () => via("probe", askProbe),
   )
   yield* add(
@@ -269,12 +282,17 @@ export const registerTools = Effect.gen(function* () {
       },
     },
     ["mode"],
-    (payload) =>
+    Schema.Struct({
+      mode: Commands.Mode,
+      folder: Schema.optionalKey(Schema.String),
+      install: Schema.optionalKey(Schema.Boolean),
+    }),
+    (args) =>
       Effect.gen(function* () {
         const capabilities = yield* McpServer.clientCapabilities
         const canAsk = capabilities.elicitation !== undefined
-        const choice = string(payload, "mode")
-        const given = string(payload, "folder")
+        const choice = args.mode
+        const given = args.folder ?? ""
         return yield* via(
           "mode",
           Effect.gen(function* () {
@@ -282,7 +300,7 @@ export const registerTools = Effect.gen(function* () {
               return yield* Commands.mode(
                 choice,
                 given === "" ? Option.none() : Option.some(given),
-                field(payload, "install") === true,
+                args.install === true,
                 "mcp",
               )
             const folder = yield* askFolder
@@ -303,6 +321,7 @@ export const registerTools = Effect.gen(function* () {
     "Runs the goal test on the learner's file. Run it before every reply in an exercise.",
     {},
     [],
+    NoArgs,
     () => via("check", Commands.check),
   )
   yield* add(
@@ -310,9 +329,10 @@ export const registerTools = Effect.gen(function* () {
     "Records that the learner answered the replay question or skipped it. Never blocks.",
     { how: prop("answered or skipped", { enum: ["answered", "skipped"] }) },
     ["how"],
-    (payload) => via("replay", Commands.replay(string(payload, "how"))),
+    Schema.Struct({ how: Commands.Replay }),
+    (args) => via("replay", Commands.replay(args.how)),
   )
-  yield* add("hint", "Gives the next hint.", {}, [], () =>
+  yield* add("hint", "Gives the next hint.", {}, [], NoArgs, () =>
     via("hint", Commands.hint),
   )
   yield* add(
@@ -320,7 +340,8 @@ export const registerTools = Effect.gen(function* () {
     "Shows the solution. Locked until all hints are used, or the learner asks for it in their own words.",
     { said: prop("The learner's own words asking for the solution") },
     [],
-    (payload) => via("solution", Commands.solution(string(payload, "said"))),
+    Schema.Struct({ said: Schema.optionalKey(Schema.String) }),
+    (args) => via("solution", Commands.solution(args.said ?? "")),
   )
   yield* add(
     "confirm",
@@ -330,12 +351,12 @@ export const registerTools = Effect.gen(function* () {
       quote: prop("One exact line of that file"),
     },
     ["file", "quote"],
-    (payload) =>
+    Schema.Struct({ file: Schema.String, quote: Schema.String }),
+    (args) =>
       Effect.gen(function* () {
         const canAsk =
           (yield* McpServer.clientCapabilities).elicitation !== undefined
-        const file = string(payload, "file")
-        const quote = string(payload, "quote")
+        const { file, quote } = args
         return yield* via(
           "confirm",
           Commands.confirm(
@@ -346,7 +367,7 @@ export const registerTools = Effect.gen(function* () {
         )
       }),
   )
-  yield* add("reset", "Restores the starter file.", {}, [], () =>
+  yield* add("reset", "Restores the starter file.", {}, [], NoArgs, () =>
     via("reset", Commands.reset),
   )
 })

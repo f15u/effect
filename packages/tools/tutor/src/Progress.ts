@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
+import { TutorError } from "./TutorError.ts"
 
 export const stateFile = ".effect-tutor.json"
 
@@ -44,8 +45,10 @@ export class Progress extends Context.Service<
   Progress,
   {
     readonly exists: Effect.Effect<boolean>
-    readonly read: Effect.Effect<State>
-    readonly update: (f: (state: State) => State) => Effect.Effect<State>
+    readonly read: Effect.Effect<State, TutorError>
+    readonly update: (
+      f: (state: State) => State,
+    ) => Effect.Effect<State, TutorError>
   }
 >()("tutor/Progress", {
   make: Effect.gen(function* () {
@@ -58,18 +61,24 @@ export class Progress extends Context.Service<
       return yield* Schema.decodeUnknownEffect(Json)(
         yield* fs.readFileString(stateFile),
       )
-    }).pipe(Effect.orDie)
+    }).pipe(
+      Effect.mapError(
+        () =>
+          new TutorError({
+            reason: "BadState",
+            message: `${stateFile} cannot be read. Ask the learner to fix or delete it, then run the command again.`,
+          }),
+      ),
+    )
 
     const update = Effect.fn("Progress.update")(function* (
       f: (state: State) => State,
     ) {
       const next = f(yield* read)
-      yield* fs.writeFileString(
-        stateFile,
-        yield* Schema.encodeEffect(Json)(next),
-      )
+      const text = yield* Schema.encodeEffect(Json)(next).pipe(Effect.orDie)
+      yield* fs.writeFileString(stateFile, text).pipe(Effect.orDie)
       return next
-    }, Effect.orDie)
+    })
 
     return { exists, read, update }
   }),

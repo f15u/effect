@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem"
 import * as Option from "effect/Option"
 import * as Path from "effect/Path"
 import * as Random from "effect/Random"
+import * as Schema from "effect/Schema"
 import { Checker, renderCheck } from "./Checker.ts"
 import { materialize } from "./Exercise.ts"
 import { notSure, probeOptions, type Concept } from "./Concept.ts"
@@ -21,6 +22,11 @@ export interface Output {
 
 const bullet = (items: ReadonlyArray<string>) =>
   items.map((item) => `  - ${item}`).join("\n")
+
+const readState = Effect.flatMap(Progress, (progress) => progress.read)
+
+const conceptOf = (state: State) =>
+  Effect.map(Curriculum, (curriculum) => curriculum.concept(state.path[0]!))
 
 const instruction = (state: State) =>
   Effect.gen(function* () {
@@ -39,18 +45,15 @@ const instruction = (state: State) =>
       case "ChoosingMode":
         return "Ask the learner: practise with a small exercise, or in their own project?"
       case "Replaying": {
-        const curriculum = yield* Curriculum
-        const concept = curriculum.concept(state.path[0]!)
+        const concept = yield* conceptOf(state)
         return `Tell the learner plainly that "${concept.title}" is complete and nothing is missing. Then ask, as an optional question, the same question again (would they answer differently now?):\n  "${concept.probe.question}"\nThe learner may answer or skip. Never block on it.`
       }
       case "Working": {
-        const curriculum = yield* Curriculum
-        const concept = curriculum.concept(state.path[0]!)
+        const concept = yield* conceptOf(state)
         return `The learner edits ${state.exercise}/main.ts. Teach "${concept.title}" by asking questions. Key idea (do not recite it): ${concept.keyIdea}\nHints used: ${state.hints}/${concept.hints.length}.`
       }
       case "ProjectWork": {
-        const curriculum = yield* Curriculum
-        const concept = curriculum.concept(state.path[0]!)
+        const concept = yield* conceptOf(state)
         return `Ask the learner to tag the files or folders in their own project where "${concept.title}" applies. Read them with your own tools. Ask where the idea shows in their code, in a plain chat message: the learner types the answer, so use no choice tool. Key idea (do not recite it): ${concept.keyIdea}\nTo record it, pick one line of their code and confirm it with the file path and the exact line.`
       }
     }
@@ -62,8 +65,7 @@ export const execute = <E, R>(
   surface: Surface = "shell",
 ) =>
   Effect.gen(function* () {
-    const progress = yield* Progress
-    const before = yield* progress.read
+    const before = yield* readState
     const exit = yield* Effect.exit(
       allows(before.phase, name)
         ? handler
@@ -71,7 +73,7 @@ export const execute = <E, R>(
             new TutorError({ reason: "WrongPhase", message: "Not now." }),
           ),
     )
-    const after = yield* progress.read
+    const after = yield* readState
     const lines: Array<string> = []
     if (Exit.isSuccess(exit)) {
       lines.push(...exit.value)
@@ -92,7 +94,11 @@ export const execute = <E, R>(
       text: lines.join("\n"),
       ok: Exit.isSuccess(exit),
     } satisfies Output
-  }).pipe(Effect.orDie)
+  }).pipe(
+    Effect.catchTag("TutorError", (error) =>
+      Effect.succeed({ text: error.message, ok: false } satisfies Output),
+    ),
+  )
 
 export const status = Effect.succeed<ReadonlyArray<string>>([])
 
@@ -100,7 +106,7 @@ export const nothingForNow = "Nothing for now."
 
 export const goalPrompt = Effect.gen(function* () {
   const curriculum = yield* Curriculum
-  const state = yield* (yield* Progress).read
+  const state = yield* readState
   return curriculum.goals
     .filter((item) => state.evidence[item.id] === undefined)
     .map((item) => ({ id: item.id, label: item.goal! }))
@@ -128,7 +134,7 @@ export const goal = (
         stateNotice,
         `Nothing is written yet. Tell the learner the file name and why. Then repeat: ${surface === "mcp" ? `call tutor_goal with goals ["${id}"] and write true` : `run: tutor goal ${id} --write`}.`,
       ]
-    const known = new Set(Object.keys((yield* progress.read).evidence))
+    const known = new Set(Object.keys((yield* readState).evidence))
     const path = curriculum.path([id], known)
     yield* progress.update((state) => ({
       ...state,
@@ -155,8 +161,14 @@ export const skipProbe = Effect.gen(function* () {
   ]
 })
 
+export const Mode = Schema.Literals(["exercise", "project"])
+export type Mode = typeof Mode.Type
+
+export const Replay = Schema.Literals(["answered", "skipped"])
+export type Replay = typeof Replay.Type
+
 export const mode = (
-  choice: string,
+  choice: Mode,
   folder: Option.Option<string>,
   install: boolean,
   surface: Surface = "shell",
@@ -169,7 +181,6 @@ export const mode = (
       }))
       return []
     }
-    if (choice !== "exercise") return []
     if (Option.isNone(folder))
       return [
         "No file is written yet. Ask the learner for the exercise folder name. Suggest none.",
@@ -183,14 +194,8 @@ export const mode = (
         reason: "BadFolder",
         message: `Folder ${folder.value} must be a relative path inside this folder. Ask the learner for another name.`,
       })
-    const state = yield* (yield* Progress).read
-    const curriculum = yield* Curriculum
-    const lines = yield* materialize(
-      folder.value,
-      curriculum.concept(state.path[0]!),
-      install,
-      surface,
-    )
+    const { concept } = yield* working
+    const lines = yield* materialize(folder.value, concept, install, surface)
     yield* (yield* Progress).update((current) => ({
       ...current,
       phase: "Working",
@@ -201,9 +206,8 @@ export const mode = (
   })
 
 const working = Effect.gen(function* () {
-  const state = yield* (yield* Progress).read
-  const curriculum = yield* Curriculum
-  return { state, concept: curriculum.concept(state.path[0]!) }
+  const state = yield* readState
+  return { state, concept: yield* conceptOf(state) }
 })
 
 const raise = (
@@ -218,7 +222,7 @@ const raise = (
 const completed = (id: string, level: Level) =>
   Effect.gen(function* () {
     const progress = yield* Progress
-    const last = (yield* progress.read).path.length === 1
+    const last = (yield* readState).path.length === 1
     yield* progress.update((current) => ({
       ...current,
       phase: last ? "Menu" : "Replaying",
@@ -310,28 +314,21 @@ export const check = Effect.gen(function* () {
       ]
     : lines
 })
-export const replay = (how: string) =>
+export const replay = (_how: Replay) =>
   Effect.gen(function* () {
-    if (how !== "answered" && how !== "skipped")
-      return yield* new TutorError({
-        reason: "BadArgument",
-        message: `Bad value "${how}". Use answered or skipped.`,
-      })
     yield* (yield* Progress).update((current) => ({
       ...current,
       phase: current.trusted ? "Probing" : "ChoosingMode",
       path: current.path.slice(1),
     }))
-    return [] as ReadonlyArray<string>
+    return []
   })
 
 export const hint = Effect.gen(function* () {
   const { state, concept } = yield* working
   const next = concept.hints[state.hints]
   if (next === undefined)
-    return [
-      "No more hints. The solution is now unlocked.",
-    ] as ReadonlyArray<string>
+    return ["No more hints. The solution is now unlocked."]
   yield* (yield* Progress).update((current) => ({
     ...current,
     hints: current.hints + 1,
@@ -339,7 +336,7 @@ export const hint = Effect.gen(function* () {
   return [
     `HINT ${state.hints + 1}/${concept.hints.length}: ${next}`,
     "Give this hint in your own words. Do not add more.",
-  ] as ReadonlyArray<string>
+  ]
 })
 
 export const solution = (said: string) =>

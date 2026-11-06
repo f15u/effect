@@ -2,8 +2,6 @@ import * as Graph from "effect/Graph"
 import type { Concept } from "./Concept.ts"
 
 export interface CurriculumGraph {
-  readonly isAcyclic: boolean
-  readonly order: ReadonlyArray<string>
   readonly path: (
     goalIds: ReadonlyArray<string>,
     known: ReadonlySet<string>,
@@ -32,10 +30,9 @@ export const buildGraph = (
       }
     }
   })
-  const isAcyclic = Graph.isAcyclic(graph)
-  const order = isAcyclic
-    ? Array.from(Graph.indices(Graph.topo(graph)), (index) => idOf.get(index)!)
-    : []
+  const order = Array.from(Graph.indices(Graph.topo(graph)), (index) =>
+    idOf.get(index)!,
+  )
 
   const path = (goalIds: ReadonlyArray<string>, known: ReadonlySet<string>) => {
     const wanted = new Set(
@@ -49,5 +46,5 @@ export const buildGraph = (
     return order.filter((id) => wanted.has(indexOf.get(id)!) && !known.has(id))
   }
 
-  return { isAcyclic, order, path }
+  return { path }
 }

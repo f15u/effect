@@ -25,10 +25,6 @@ export const handleEveryError = defineConcept({
   },
   keyIdea:
     "Effect.catchTags takes one object. Each key is a _tag, each value a handler. TypeScript checks every key. When all errors are handled, the Error type is never.",
-  wrongBeliefs: [
-    "Types change only at runtime, so handled errors stay in the type. (TypeScript removes them when you handle them.)",
-    "A handler makes the error type unknown. (The type keeps only the errors that remain.)",
-  ],
   hints: [
     "One call can take handlers for several tags. Which function name ends in an s?",
     "Pipe `self` into `Effect.catchTags({ ExpiredCardError: ..., InvalidTokenError: ..., NetworkError: ... })`.",
