@@ -470,6 +470,38 @@ describe("check", () => {
   )
 
   live(
+    "a failed check on an edited file sends the learner to a concept that is only explained",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Menu",
+          goal: "",
+          path: [],
+          exercise: "",
+          hints: 0,
+          evidence: { "tagged-errors": "Explained" },
+        }),
+      )
+      yield* s.t("goal", "catch-a-defect")
+      yield* s.t("mode", "exercise", "practice")
+      const starterText = yield* s.read("practice/main.ts")
+      const untouched = yield* s.t("check")
+      assert.notInclude(untouched.out, "REVISIT")
+      yield* s.write("practice/main.ts", `${starterText}\n// tried\n`)
+      const r = yield* s.t("check")
+      assert.strictEqual(r.code, 1, r.out)
+      assert.include(r.out, "REVISIT")
+      assert.include(r.out, "tutor mode project")
+      const state = JSON.parse(yield* s.read(".effect-tutor.json"))
+      assert.deepStrictEqual(state.path, ["tagged-errors", "catch-a-defect"])
+      assert.strictEqual(state.phase, "ChoosingMode")
+      assert.deepStrictEqual(state.evidence, { "tagged-errors": "Explained" })
+    }),
+  )
+
+  live(
     "a failing check records nothing and shows the failure",
     Effect.gen(function* () {
       const s = yield* working()

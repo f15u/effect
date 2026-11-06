@@ -189,11 +189,32 @@ export const check = Effect.gen(function* () {
     source,
   )
   const lines = renderCheck(result)
-  if (result._tag !== "Passed")
+  if (result._tag !== "Passed") {
+    const edited = source !== (yield* curriculum.file(concept, "starter.ts"))
+    const need = edited
+      ? concept.needs.find((item) => state.evidence[item.id] === "Explained")
+      : undefined
+    if (need !== undefined) {
+      yield* (yield* Progress).update((current) => ({
+        ...current,
+        phase: "ChoosingMode",
+        path: [need.id, ...current.path],
+        exercise: "",
+        hints: 0,
+      }))
+      return yield* new TutorError({
+        reason: "NotYet",
+        message: [
+          ...lines,
+          `REVISIT: the learner only explained "${need.title}", never proved it. Go back to it first.`,
+        ].join("\n"),
+      })
+    }
     return yield* new TutorError({
       reason: "NotYet",
       message: lines.join("\n"),
     })
+  }
   const last = state.path.length === 1
   yield* (yield* Progress).update((current) => ({
     ...current,
