@@ -502,6 +502,39 @@ describe("check", () => {
   )
 
   live(
+    "after a revisit, proving the earlier concept leads back to the later one",
+    Effect.gen(function* () {
+      const s = yield* session()
+      yield* s.write(
+        ".effect-tutor.json",
+        JSON.stringify({
+          phase: "Menu",
+          goal: "",
+          path: [],
+          exercise: "",
+          hints: 0,
+          evidence: { "tagged-errors": "Explained" },
+        }),
+      )
+      yield* s.t("goal", "catch-a-defect")
+      yield* s.t("mode", "exercise", "practice")
+      yield* s.write("practice/main.ts", "export {}\n")
+      yield* s.t("check")
+      const back = yield* s.t("mode", "exercise", "again")
+      assert.strictEqual(back.code, 0, back.out)
+      yield* s.write("again/main.ts", solution)
+      const passed = yield* s.t("check")
+      assert.include(passed.out, "tutor replay")
+      const next = yield* s.t("replay", "answered")
+      assert.include(next.out, "tutor mode project")
+      assert.include(
+        yield* s.read(".effect-tutor.json"),
+        '"path":["catch-a-defect"]',
+      )
+    }),
+  )
+
+  live(
     "a failing check records nothing and shows the failure",
     Effect.gen(function* () {
       const s = yield* working()
