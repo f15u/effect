@@ -32,7 +32,7 @@ const tsconfig = JSON.stringify({
     skipLibCheck: true,
     allowImportingTsExtensions: true,
   },
-  files: ["main.ts"],
+  files: ["main.ts", "main.test.ts"],
 })
 
 const marker = "TUTOR_RESULT "
@@ -103,6 +103,11 @@ export class Checker extends Context.Service<
           const lines = types.stdout
             .split("\n")
             .filter((line) => line.includes("error TS"))
+            .map((line) =>
+              line.startsWith("main.test.ts")
+                ? `The goal test expects a different type: ${line}`
+                : line,
+            )
           return { _tag: "TypeErrors", lines } as const
         }
 
