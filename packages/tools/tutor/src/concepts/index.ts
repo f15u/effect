@@ -1,17 +1,23 @@
-import { catchADefect } from "./catch-a-defect/concept.ts"
-import { catchATag } from "./catch-a-tag/concept.ts"
-import { fatalAtBoundary } from "./fatal-at-boundary/concept.ts"
-import { handleEveryError } from "./handle-every-error/concept.ts"
-import { stopOnBrokenRule } from "./stop-on-broken-rule/concept.ts"
-import { taggedErrors } from "./tagged-errors/concept.ts"
-import { typedFailure } from "./typed-failure/concept.ts"
+import { bugIsNotAnError } from "./bug-is-not-an-error/concept.ts"
+import { containADefect } from "./contain-a-defect/concept.ts"
+import { errorsInTheType } from "./errors-in-the-type/concept.ts"
+import { giveUpOnPurpose } from "./give-up-on-purpose/concept.ts"
+import { handleAllErrors } from "./handle-all-errors/concept.ts"
+import { handleOneError } from "./handle-one-error/concept.ts"
+import { namedErrors } from "./named-errors/concept.ts"
+import { thrownErrorsHide } from "./thrown-errors-hide/concept.ts"
+import { triageFailures } from "./triage-failures/concept.ts"
+import { wrapWhatThrows } from "./wrap-what-throws/concept.ts"
 
 export const concepts = [
-  taggedErrors,
-  typedFailure,
-  catchATag,
-  handleEveryError,
-  stopOnBrokenRule,
-  fatalAtBoundary,
-  catchADefect,
+  thrownErrorsHide,
+  wrapWhatThrows,
+  namedErrors,
+  errorsInTheType,
+  handleOneError,
+  handleAllErrors,
+  bugIsNotAnError,
+  triageFailures,
+  giveUpOnPurpose,
+  containADefect,
 ] as const
