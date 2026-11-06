@@ -91,34 +91,36 @@ export const session = (options: { readonly npm?: boolean } = {}) =>
 
 export interface ElicitRequest {
   readonly message: string
-  readonly options: ReadonlyArray<string>
-  readonly fields: ReadonlyArray<string>
+  readonly properties: Record<string, any>
 }
 
 export type ElicitAnswer =
-  | {
-      readonly action: "accept"
-      readonly choice: string
-      readonly words?: string
-    }
+  | { readonly action: "accept"; readonly content: Record<string, unknown> }
   | { readonly action: "decline" }
 
-export interface McpOptions {
-  readonly capabilities?: Record<string, unknown>
-  readonly answer?: (request: ElicitRequest) => ElicitAnswer
-}
-
-export const mcpSession = (options: McpOptions = {}) =>
+export const mcpSession = (
+  options: {
+    readonly capabilities?: Record<string, unknown>
+    readonly answer?: (request: ElicitRequest) => ElicitAnswer
+  } = {},
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-mcp-" })
+    const bin = yield* fs.makeTempDirectoryScoped({ prefix: "tutor-bin-" })
+    const installLog = path.join(bin, "installs.log")
+    yield* fs.writeFileString(
+      path.join(bin, "npm"),
+      `#!/bin/sh\necho "$PWD :: $@" >> "${installLog}"\n`,
+      { mode: 0o755 },
+    )
     const cli = path.resolve(import.meta.dirname, "../src/cli.ts")
+    const asked: Array<ElicitRequest> = []
     const inbox = yield* Queue.unbounded<Uint8Array>()
     const encoder = new TextEncoder()
     const pending = new Map<number, Deferred.Deferred<any>>()
-    const asked: Array<ElicitRequest> = []
     let nextId = 1
 
     const send = (message: unknown) =>
@@ -128,6 +130,8 @@ export const mcpSession = (options: McpOptions = {}) =>
       ChildProcess.make(process.execPath, ["--no-warnings", cli, "mcp"], {
         cwd: dir,
         stdin: Stream.fromQueue(inbox),
+        env: { PATH: `${bin}:${process.env.PATH}` },
+        extendEnv: true,
       }),
     )
 
@@ -139,31 +143,16 @@ export const mcpSession = (options: McpOptions = {}) =>
           if (line.trim() === "") return
           const message = JSON.parse(line)
           if (message.method === "elicitation/create") {
-            const properties = message.params.requestedSchema.properties
-            const request: ElicitRequest = {
-              message: message.params.message,
-              options: properties.choice.enum,
-              fields: Object.keys(properties),
+            const request = {
+              message: message.params.message as string,
+              properties: message.params.requestedSchema.properties,
             }
             asked.push(request)
-            const answer = (options.answer ?? (() => ({ action: "decline" })))(
-              request,
-            ) as ElicitAnswer
+            const answer = options.answer?.(request) ?? { action: "decline" }
             yield* send({
               jsonrpc: "2.0",
               id: message.id,
-              result:
-                answer.action === "accept"
-                  ? {
-                      action: "accept",
-                      content: {
-                        choice: answer.choice,
-                        ...(answer.words === undefined
-                          ? {}
-                          : { words: answer.words }),
-                      },
-                    }
-                  : { action: "decline" },
+              result: answer,
             })
             return
           }
@@ -208,15 +197,30 @@ export const mcpSession = (options: McpOptions = {}) =>
     )
 
     const files = fs.readDirectory(dir)
+    const nested = (sub: string) =>
+      fs
+        .readDirectory(path.join(dir, sub))
+        .pipe(Effect.map((names) => names.sort()))
     const read = (file: string) => fs.readFileString(path.join(dir, file))
     const write = (file: string, content: string) =>
       fs
         .makeDirectory(path.dirname(path.join(dir, file)), { recursive: true })
         .pipe(Effect.andThen(fs.writeFileString(path.join(dir, file), content)))
 
-    const state = read(".effect-tutor.json").pipe(
-      Effect.map((json) => JSON.parse(json) as Record<string, any>),
-    )
+    const installs = fs
+      .readFileString(installLog)
+      .pipe(Effect.orElseSucceed(() => ""))
 
-    return { dir, init, tool, tools, files, read, write, state, asked }
+    return {
+      dir,
+      init,
+      tool,
+      tools,
+      files,
+      nested,
+      read,
+      write,
+      asked,
+      installs,
+    }
   })

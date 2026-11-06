@@ -26,6 +26,12 @@ const tsconfig = JSON.stringify(
   2,
 )
 
+export const fileReasons = {
+  "main.ts": "the starter file you edit",
+  "package.json": "so the editor treats the folder as a project",
+  "tsconfig.json": "so the editor shows types",
+} as const
+
 const hasEffect = (text: string) => {
   try {
     const pkg = JSON.parse(text) as Record<
@@ -71,15 +77,11 @@ export const materialize = (
     const files: ReadonlyArray<readonly [string, string, string]> =
       existing === undefined
         ? [
-            ["main.ts", starter, "the starter file you edit"],
-            [
-              "package.json",
-              `${packageJson}\n`,
-              "so the editor treats the folder as a project",
-            ],
-            ["tsconfig.json", `${tsconfig}\n`, "so the editor shows types"],
+            ["main.ts", starter, fileReasons["main.ts"]],
+            ["package.json", `${packageJson}\n`, fileReasons["package.json"]],
+            ["tsconfig.json", `${tsconfig}\n`, fileReasons["tsconfig.json"]],
           ]
-        : [["main.ts", starter, "the starter file you edit"]]
+        : [["main.ts", starter, fileReasons["main.ts"]]]
     const lines: Array<string> =
       existing === undefined
         ? []

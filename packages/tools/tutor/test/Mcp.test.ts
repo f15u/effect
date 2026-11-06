@@ -91,6 +91,31 @@ describe("tutor mcp", () => {
       ])
     }),
   )
+
+  live(
+    "a client that can ask gets a folder form with no default that names every file written",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({
+        capabilities: { elicitation: {} },
+        answer: (request) =>
+          request.properties.folder !== undefined
+            ? { action: "accept", content: { folder: "practice" } }
+            : { action: "accept", content: { install: false } },
+      })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const done = yield* s.tool("tutor_mode", { mode: "exercise" })
+      assert.isFalse(done.isError)
+      const form = s.asked[0]!
+      assert.isUndefined(form.properties.folder.default)
+      for (const file of ["main.ts", "package.json", "tsconfig.json"])
+        assert.include(form.message, file)
+      assert.deepStrictEqual(yield* s.nested("practice"), [
+        "main.ts",
+        "package.json",
+        "tsconfig.json",
+      ])
+    }),
+  )
 })
 
 describe("tutor mcp trusted channel", () => {
