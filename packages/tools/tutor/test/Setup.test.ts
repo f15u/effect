@@ -12,6 +12,8 @@ interface Options {
   readonly answers: ReadonlyArray<string>
   readonly opencodeVersion?: string
   readonly existing?: Record<string, string>
+  readonly failing?: boolean
+  readonly tutorOnPath?: boolean
 }
 
 const setupRun = (options: Options) =>
@@ -30,10 +32,14 @@ const setupRun = (options: Options) =>
         path.join(bin, agent),
         agent === "opencode"
           ? `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "${version}"; exit 0; fi\necho "${agent} $@" >> "${log}"\n`
-          : `#!/bin/sh\necho "${agent} $@" >> "${log}"\n`,
+          : `#!/bin/sh\necho "${agent} $@" >> "${log}"\n${options.failing ? "echo boom >&2\nexit 1\n" : ""}`,
         { mode: 0o755 },
       )
     }
+    if (options.tutorOnPath)
+      yield* fs.writeFileString(path.join(bin, "tutor"), "#!/bin/sh\n", {
+        mode: 0o755,
+      })
     for (const [name, content] of Object.entries(options.existing ?? {}))
       yield* fs.writeFileString(path.join(dir, name), content)
     const cli = path.resolve(import.meta.dirname, "../src/cli.ts")
@@ -116,6 +122,34 @@ describe("tutor setup", () => {
         "claude mcp add --scope project tutor -- tutor mcp\n",
       )
       assert.include(r.out, "approve the project .mcp.json once")
+    }),
+  )
+
+  live(
+    "a failed agent command is reported as failed, not done",
+    Effect.gen(function* () {
+      const r = yield* setupRun({
+        agents: ["claude"],
+        answers: ["y"],
+        failing: true,
+      })
+      assert.notInclude(r.out, "Done:")
+      assert.include(r.out, "Failed: Claude Code")
+      assert.include(r.out, "Run this yourself:")
+    }),
+  )
+
+  live(
+    "says when tutor is not on the PATH, and stays quiet when it is",
+    Effect.gen(function* () {
+      const missing = yield* setupRun({ agents: ["claude"], answers: ["n"] })
+      assert.include(missing.out, "`tutor` is not on your PATH")
+      const found = yield* setupRun({
+        agents: ["claude"],
+        answers: ["n"],
+        tutorOnPath: true,
+      })
+      assert.notInclude(found.out, "is not on your PATH")
     }),
   )
 

@@ -11,5 +11,6 @@ export class TutorError extends Data.TaggedError("TutorError")<{
     | "SolutionLocked"
     | "NotYet"
     | "NoAnswer"
+    | "SetupFailed"
   readonly message: string
 }> {}

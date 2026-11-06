@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream"
 import * as Terminal from "effect/Terminal"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import { TutorError } from "./TutorError.ts"
 
 interface Plan {
   readonly label: string
@@ -15,7 +16,7 @@ interface Plan {
   readonly show: ReadonlyArray<string>
   readonly apply: Effect.Effect<
     void,
-    PlatformError,
+    PlatformError | TutorError,
     FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
   >
 }
@@ -29,7 +30,12 @@ const runCommand = (line: string) => {
         const handle = yield* spawner.spawn(
           ChildProcess.make(command!, args, { stdin: "ignore" }),
         )
-        yield* handle.exitCode
+        const code = Number(yield* handle.exitCode)
+        if (code !== 0)
+          return yield* new TutorError({
+            reason: "SetupFailed",
+            message: `${line} exited with code ${code}.`,
+          })
       }),
     )
   })
@@ -115,8 +121,17 @@ const offer = Effect.fn("Setup.offer")(function* (plan: Plan) {
   yield* terminal.display("Apply this? [y/N] ")
   const answer = yield* terminal.readLine
   if (isYes(answer)) {
-    yield* plan.apply
-    yield* Console.log(`Done: ${plan.label}.`)
+    const failure = yield* plan.apply.pipe(
+      Effect.as(undefined),
+      Effect.catch((error) => Effect.succeed(error.message)),
+    )
+    if (failure === undefined) {
+      yield* Console.log(`Done: ${plan.label}.`)
+    } else {
+      yield* Console.log(
+        `Failed: ${plan.label}. ${failure}\nRun this yourself:\n${plan.show.join("\n")}`,
+      )
+    }
   } else {
     yield* Console.log(
       `Nothing changed.\nRun this yourself:\n${plan.show.join("\n")}`,
@@ -136,6 +151,10 @@ export const setup = Effect.gen(function* () {
     )
     return
   }
+  if (!(yield* onPath("tutor")))
+    yield* Console.log(
+      "`tutor` is not on your PATH. The agents start `tutor mcp`, so they cannot find it until you install the Tutor CLI so that `tutor` runs from any folder.",
+    )
   if (found.claude) yield* offer(claudePlan)
   if (found.opencode) {
     const plan = yield* opencodePlan
