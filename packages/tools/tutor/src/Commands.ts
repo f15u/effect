@@ -301,10 +301,10 @@ const notFound = (file: string) =>
     message: `${file} is not a source file of the learner's project that holds that line. Ask which file shows it, read it again, and quote one line exactly.`,
   })
 
-export const confirm = (
+export const confirm = <R = never>(
   file: string,
   quote: string,
-  ask: Option.Option<Effect.Effect<boolean, never, any>> = Option.none(),
+  ask: Option.Option<Effect.Effect<boolean, never, R>> = Option.none(),
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
