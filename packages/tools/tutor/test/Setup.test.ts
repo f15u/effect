@@ -1,11 +1,11 @@
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Path from "effect/Path"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
-import { TestLayer } from "./Session.ts"
+import { liveNode as live } from "./Live.ts"
 
 interface Options {
   readonly agents: ReadonlyArray<string>
@@ -78,16 +78,6 @@ const setupRun = (options: Options) =>
       read: (f: string) => fs.readFileString(path.join(dir, f)),
     }
   })
-
-const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
-  it.live(
-    name,
-    () =>
-      body.pipe(Effect.scoped, Effect.provide(TestLayer)) as Effect.Effect<
-        A,
-        E
-      >,
-  )
 
 describe("tutor setup", () => {
   live(

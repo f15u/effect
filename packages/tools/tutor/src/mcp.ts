@@ -201,6 +201,7 @@ export const registerTools = Effect.gen(function* () {
           Effect.provideContext(services),
           // McpServer types omit McpServerClient from handler services, but the server provides it per call
           (effect) =>
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion
             effect as Effect.Effect<
               McpSchema.CallToolResult,
               never,

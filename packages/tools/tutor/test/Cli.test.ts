@@ -1,26 +1,7 @@
-import * as NodeServices from "@effect/platform-node/NodeServices"
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe } from "@effect/vitest"
 import * as Effect from "effect/Effect"
-import type * as FileSystem from "effect/FileSystem"
-import type * as Path from "effect/Path"
-import type * as Scope from "effect/Scope"
-import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import { liveNode as live } from "./Live.ts"
 import { session } from "./Session.ts"
-
-const live = <A, E>(
-  name: string,
-  body: Effect.Effect<
-    A,
-    E,
-    | Scope.Scope
-    | FileSystem.FileSystem
-    | Path.Path
-    | ChildProcessSpawner.ChildProcessSpawner
-  >,
-) =>
-  it.live(name, () =>
-    body.pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  )
 
 describe("the cli process", () => {
   live(

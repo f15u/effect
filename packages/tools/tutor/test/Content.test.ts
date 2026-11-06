@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
@@ -7,31 +7,23 @@ import * as Path from "effect/Path"
 import { type Concept } from "../src/Concept.ts"
 import { concepts } from "../src/concepts/index.ts"
 import { ContentCheck } from "../src/ContentCheck.ts"
+import { liveWith } from "./Live.ts"
 
 const Live = ContentCheck.layer.pipe(Layer.provideMerge(NodeServices.layer))
 
-const withFiles = (
-  concept: Concept,
-  swap: Partial<
-    Record<"starter.ts" | "solution.ts", "starter.ts" | "solution.ts">
-  >,
-) =>
+const withFiles = (concept: Concept, swap: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "concept-" })
     for (const name of ["starter.ts", "solution.ts", "goal.test.ts"] as const) {
-      const from = swap[name as "starter.ts" | "solution.ts"] ?? name
+      const from = swap[name] ?? name
       yield* fs.copyFile(path.join(concept.dir, from), path.join(dir, name))
     }
     return { ...concept, dir }
   })
 
-const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
-  it.live(
-    name,
-    () => body.pipe(Effect.scoped, Effect.provide(Live)) as Effect.Effect<A, E>,
-  )
+const live = liveWith(Live)
 
 describe("the content check", () => {
   for (const concept of concepts) {

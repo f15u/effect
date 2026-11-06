@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
 import { allows, commandNames, machine } from "../src/Machine.ts"
-import type { Phase } from "../src/Progress.ts"
+import { Phase } from "../src/Progress.ts"
 import { defineConcept, type Concept } from "../src/Concept.ts"
 import {
   session as openSession,
@@ -263,7 +263,7 @@ describe("the transition table", () => {
     confirm: ["app.ts", "--quote", "x"],
   }
 
-  for (const phase of Object.keys(reach) as Array<Phase>) {
+  for (const phase of Phase.literals) {
     live(
       `${phase === "Menu" ? "the first step" : phase === "Replaying" ? "in the replay" : phase === "Working" ? "while working on the exercise" : "after a goal"} refuses every command its row does not list and shows every one it does`,
       Effect.gen(function* () {

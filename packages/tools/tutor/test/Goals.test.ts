@@ -1,21 +1,13 @@
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe } from "@effect/vitest"
 import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
 import * as NodeFs from "node:fs"
 import { concepts } from "../src/concepts/index.ts"
 import { Curriculum } from "../src/Curriculum.ts"
 import { buildGraph } from "../src/CurriculumGraph.ts"
-import { session, TestLayer } from "./Session.ts"
-
-const live = <A, E>(name: string, body: Effect.Effect<A, E, any>) =>
-  it.live(
-    name,
-    () =>
-      body.pipe(Effect.scoped, Effect.provide(TestLayer)) as Effect.Effect<
-        A,
-        E
-      >,
-    120_000,
-  )
+import { State } from "../src/Progress.ts"
+import { liveNode } from "./Live.ts"
+import { session } from "./Session.ts"
 
 const graph = buildGraph(concepts)
 const goals = concepts.filter((item) => item.goal !== undefined)
@@ -27,7 +19,7 @@ const solutionOf = (id: string) =>
 
 describe("every goal walks to finished", () => {
   for (const goal of goals) {
-    live(
+    liveNode(
       `${goal.id}: ${goal.goal}`,
       Effect.gen(function* () {
         const path = graph.path([goal.id], new Set())
@@ -49,16 +41,19 @@ describe("every goal walks to finished", () => {
         }
         const last = yield* s.t("status")
         assert.notInclude(last.out, `${goal.id}:`)
-        const state = JSON.parse(yield* s.read(".effect-tutor.json"))
+        const state = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(State),
+        )(yield* s.read(".effect-tutor.json"))
         assert.strictEqual(state.evidence[goal.id], "Proved")
         assert.strictEqual(state.goal, "")
       }),
+      120_000,
     )
   }
 })
 
 describe("the curriculum", () => {
-  live(
+  liveNode(
     "a goal that does not exist is refused, and every real goal is accepted",
     Effect.gen(function* () {
       const curriculum = yield* Curriculum
