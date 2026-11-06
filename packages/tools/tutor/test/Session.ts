@@ -196,6 +196,10 @@ export const mcpSession = (
       ),
     )
 
+    const rawTools = call("tools/list", {}).pipe(
+      Effect.map((response) => response.result.tools as Array<any>),
+    )
+
     const files = fs.readDirectory(dir)
     const nested = (sub: string) =>
       fs
@@ -216,6 +220,7 @@ export const mcpSession = (
       init,
       tool,
       tools,
+      rawTools,
       files,
       nested,
       read,

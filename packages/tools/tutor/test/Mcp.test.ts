@@ -116,6 +116,65 @@ describe("tutor mcp", () => {
       ])
     }),
   )
+
+  live(
+    "installs only after a yes in the form, even when the agent passes install",
+    Effect.gen(function* () {
+      const reply = (yes: boolean) =>
+        mcpSession({
+          capabilities: { elicitation: {} },
+          answer: (request) =>
+            request.properties.folder !== undefined
+              ? { action: "accept", content: { folder: "practice" } }
+              : { action: "accept", content: { install: yes } },
+        })
+      const no = yield* reply(false)
+      yield* no.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* no.tool("tutor_mode", { mode: "exercise", install: true })
+      assert.strictEqual(yield* no.installs, "")
+      const yes = yield* reply(true)
+      yield* yes.tool("tutor_goal", { goals: ["tagged-errors"] })
+      yield* yes.tool("tutor_mode", { mode: "exercise" })
+      assert.include(yield* yes.installs, "install effect typescript")
+    }),
+  )
+
+  live(
+    "a declined folder form writes nothing and leaves the choice open",
+    Effect.gen(function* () {
+      const s = yield* mcpSession({
+        capabilities: { elicitation: {} },
+        answer: () => ({ action: "decline" }),
+      })
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const out = yield* s.tool("tutor_mode", { mode: "exercise" })
+      assert.isTrue(out.isError)
+      assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+    }),
+  )
+
+  live(
+    "without elicitation nothing is written until the agent passes a name, and the tool says what it writes",
+    Effect.gen(function* () {
+      const s = yield* mcpSession()
+      yield* s.tool("tutor_goal", { goals: ["tagged-errors"] })
+      const ask = yield* s.tool("tutor_mode", { mode: "exercise" })
+      assert.include(ask.out, "folder name")
+      assert.deepStrictEqual(yield* s.files, [".effect-tutor.json"])
+      assert.deepStrictEqual(s.asked, [])
+      const list = yield* s.rawTools
+      const mode = list.find((item: any) => item.name === "tutor_mode")
+      for (const file of ["main.ts", "package.json", "tsconfig.json"])
+        assert.include(mode.description, file)
+      yield* s.tool("tutor_mode", { mode: "exercise", folder: "practice" })
+      assert.strictEqual(yield* s.installs, "")
+      assert.deepStrictEqual(yield* s.nested("practice"), [
+        "main.ts",
+        "package.json",
+        "tsconfig.json",
+      ])
+    }),
+  )
 })
 
 describe("tutor mcp trusted channel", () => {
