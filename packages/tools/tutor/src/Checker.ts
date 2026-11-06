@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
@@ -30,7 +31,6 @@ const tsconfig = JSON.stringify({
     moduleResolution: "nodenext",
     skipLibCheck: true,
     allowImportingTsExtensions: true,
-    types: ["node"],
   },
   files: ["main.ts"],
 })
@@ -73,9 +73,11 @@ export class Checker extends Context.Service<
     const path = yield* Path.Path
     const process = yield* Process
     const src = import.meta.dirname
-    const scratch = path.resolve(src, "../.tmp")
-    const tsc = path.resolve(src, "../../../node_modules/typescript/bin/tsc")
     const shim = path.resolve(src, "tutorial-test.mjs")
+    const tsc = fileURLToPath(import.meta.resolve("typescript/bin/tsc"))
+    const effectDir = path.dirname(
+      fileURLToPath(import.meta.resolve("effect/package.json")),
+    )
 
     const prepareTest = (test: string) =>
       test
@@ -84,11 +86,11 @@ export class Checker extends Context.Service<
 
     const run = Effect.fn("Checker.run")(
       function* (test: string, source: string) {
-        yield* fs.makeDirectory(scratch, { recursive: true })
         const dir = yield* fs.makeTempDirectoryScoped({
-          directory: scratch,
-          prefix: "check-",
+          prefix: "tutor-check-",
         })
+        yield* fs.makeDirectory(path.join(dir, "node_modules"))
+        yield* fs.symlink(effectDir, path.join(dir, "node_modules", "effect"))
         yield* fs.writeFileString(path.join(dir, "main.ts"), source)
         yield* fs.writeFileString(
           path.join(dir, "main.test.ts"),

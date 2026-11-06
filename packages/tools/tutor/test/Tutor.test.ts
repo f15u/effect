@@ -264,7 +264,9 @@ describe("exercise mode", () => {
       assert.strictEqual(r.code, 0)
       assert.deepStrictEqual(yield* s.read("practice/main.ts"), starter)
       assert.include(yield* s.read("practice/package.json"), '"type": "module"')
-      assert.include(yield* s.read("practice/tsconfig.json"), "strict")
+      const config = JSON.parse(yield* s.read("practice/tsconfig.json"))
+      assert.strictEqual(config.compilerOptions.strict, true)
+      assert.isUndefined(config.compilerOptions.types)
       assert.include(r.out, "practice/main.ts")
       assert.include(r.out, "practice/package.json")
       assert.include(r.out, "practice/tsconfig.json")
@@ -577,6 +579,17 @@ describe("check", () => {
         yield* s.read(".effect-tutor.json"),
         '"path":["catch-a-defect"]',
       )
+    }),
+  )
+
+  live(
+    "a check leaves no scratch folder inside the package",
+    Effect.gen(function* () {
+      const s = yield* working()
+      yield* s.write("practice/main.ts", solution)
+      const r = yield* s.t("check")
+      assert.include(r.out, "PASSED")
+      assert.isFalse(NodeFs.existsSync(new URL("../.tmp", import.meta.url)))
     }),
   )
 

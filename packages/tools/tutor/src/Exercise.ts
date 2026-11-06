@@ -18,7 +18,6 @@ const tsconfig = JSON.stringify(
       module: "nodenext",
       moduleResolution: "nodenext",
       skipLibCheck: true,
-      types: ["node"],
     },
     include: ["main.ts"],
   },
