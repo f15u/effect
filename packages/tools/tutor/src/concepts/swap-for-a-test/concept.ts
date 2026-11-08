@@ -5,6 +5,7 @@ export const swapForATest = defineConcept({
   dir: import.meta.dirname,
   id: "swap-for-a-test",
   title: "Swapping a dependency for a test",
+  goal: "Test with a fake dependency",
   needs: [provideWithALayer],
   probe: {
     question: "You want a test to run `checkout` with a fake gateway. What do you change?",

@@ -6,6 +6,7 @@ export const apiIsAContract = defineConcept({
   dir: import.meta.dirname,
   id: "api-is-a-contract",
   title: "Describing an HTTP API as a contract",
+  goal: "Describe an HTTP API as a contract",
   needs: [describeDataOnce, transformWithPipe],
   probe: {
     question:

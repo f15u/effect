@@ -6,6 +6,7 @@ export const errorsBecomeStatuses = defineConcept({
   dir: import.meta.dirname,
   id: "errors-become-statuses",
   title: "Turning a typed error into an HTTP status",
+  goal: "Send typed errors as HTTP statuses",
   needs: [implementHandlers, schemaErrors],
   probe: {
     question:

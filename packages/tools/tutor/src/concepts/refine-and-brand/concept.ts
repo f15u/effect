@@ -5,6 +5,7 @@ export const refineAndBrand = defineConcept({
   dir: import.meta.dirname,
   id: "refine-and-brand",
   title: "Putting business rules in the Schema",
+  goal: "Put my business rules in the Schema",
   needs: [encodeForTheWire],
   probe: {
     question:

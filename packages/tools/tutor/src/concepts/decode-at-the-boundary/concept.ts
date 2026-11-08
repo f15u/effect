@@ -6,6 +6,7 @@ export const decodeAtTheBoundary = defineConcept({
   dir: import.meta.dirname,
   id: "decode-at-the-boundary",
   title: "Decoding unknown input into a typed Effect",
+  goal: "Check data where it comes in",
   needs: [describeDataOnce, transformWithPipe],
   probe: {
     question: "`Schema.decodeUnknownEffect(Payment)(input)` gets a bad input. Where does the failure go?",

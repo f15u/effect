@@ -6,6 +6,7 @@ export const dependenciesInTheType = defineConcept({
   dir: import.meta.dirname,
   id: "dependencies-in-the-type",
   title: "Showing what an Effect needs in its type",
+  goal: "Make my code say what it needs",
   needs: [transformWithPipe, hiddenDependencies],
   probe: {
     question: "`checkout` runs `const gateway = yield* Gateway` in its body. What is its Requirements type?",
