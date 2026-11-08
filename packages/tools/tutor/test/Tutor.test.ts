@@ -260,6 +260,7 @@ describe("the transition table", () => {
     hint: [],
     solution: [],
     reset: [],
+    replay: ["skipped"],
     confirm: ["app.ts", "--quote", "x"],
   }
 

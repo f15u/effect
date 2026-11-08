@@ -180,10 +180,11 @@ describe("tutor mcp", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession({
         capabilities: { elicitation: {} },
-        answer: (request) =>
+        answer: unsure((request) =>
           request.properties.folder !== undefined
             ? { action: "accept", content: { folder: "practice" } }
             : { action: "accept", content: { install: false } },
+        ),
       })
       yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_probe")
@@ -207,10 +208,11 @@ describe("tutor mcp", () => {
       const reply = (yes: boolean) =>
         mcpSession({
           capabilities: { elicitation: {} },
-          answer: (request) =>
+          answer: unsure((request) =>
             request.properties.folder !== undefined
               ? { action: "accept", content: { folder: "practice" } }
               : { action: "accept", content: { install: yes } },
+          ),
         })
       const no = yield* reply(false)
       yield* no.tool("tutor_goal", { goals: ["solo"], write: true })
@@ -230,7 +232,7 @@ describe("tutor mcp", () => {
     Effect.gen(function* () {
       const s = yield* mcpSession({
         capabilities: { elicitation: {} },
-        answer: () => ({ action: "decline" }),
+        answer: unsure(() => ({ action: "decline" })),
       })
       yield* s.tool("tutor_goal", { goals: ["solo"], write: true })
       yield* s.tool("tutor_probe")
@@ -288,7 +290,7 @@ describe("tutor mcp trusted channel", () => {
           nothingForNow,
         ],
       )
-      assert.strictEqual(s.asked[0]!.options.at(-1), nothingForNow)
+      assert.strictEqual(choices(s.asked[0]!).at(-1), nothingForNow)
     }),
   )
 
@@ -301,7 +303,7 @@ describe("tutor mcp trusted channel", () => {
       assert.include(first.out, "did not pick a goal")
       const nothing = yield* mcpSession({
         capabilities: canAsk,
-        answer: () => ({ action: "accept", choice: nothingForNow }),
+        answer: () => pick(nothingForNow),
       })
       const second = yield* nothing.tool("tutor_goal")
       assert.isTrue(second.isError)
@@ -357,14 +359,11 @@ describe("tutor mcp trusted channel", () => {
 const learner =
   (goal: string, probe: (request: ElicitRequest) => ElicitAnswer) =>
   (request: ElicitRequest): ElicitAnswer =>
-    request.options.includes(nothingForNow)
-      ? { action: "accept", choice: goal }
-      : probe(request)
+    choices(request).includes(nothingForNow) ? pick(goal) : probe(request)
 
 const pick = (choice: string, words?: string): ElicitAnswer => ({
   action: "accept",
-  choice,
-  ...(words === undefined ? {} : { words }),
+  content: { choice, ...(words === undefined ? {} : { words }) },
 })
 
 const choices = (request: ElicitRequest): ReadonlyArray<string> =>
@@ -417,7 +416,7 @@ describe("tutor mcp probe", () => {
         assert.deepStrictEqual(state.evidence, {})
         assert.strictEqual(state.phase, "ChoosingMode")
         assert.include(probe.out, "tutor_mode")
-        if (answer.action === "accept" && answer.choice === wrong.text)
+        if (answer.action === "accept" && answer.content.choice === wrong.text)
           assert.include(probe.out, wrong.belief)
       }
     }),

@@ -12,7 +12,7 @@ import { notSure, probeOptions, type Concept } from "./Concept.ts"
 import { Curriculum } from "./Curriculum.ts"
 import { holdsLine } from "./ProjectFile.ts"
 import { allows, youCanNow, type Surface } from "./Machine.ts"
-import { Progress, stateFile, type State } from "./Progress.ts"
+import { Progress, stateFile, type Level, type State } from "./Progress.ts"
 import { TutorError } from "./TutorError.ts"
 
 export interface Output {
@@ -297,22 +297,7 @@ export const check = Effect.gen(function* () {
       message: lines.join("\n"),
     })
   }
-  const last = state.path.length === 1
-  yield* (yield* Progress).update((current) => ({
-    ...current,
-    phase: last ? "Menu" : "Replaying",
-    path: last ? [] : current.path,
-    goal: last ? "" : current.goal,
-    exercise: "",
-    hints: 0,
-    evidence: { ...current.evidence, [concept.id]: "Proved" },
-  }))
-  return last
-    ? [
-        ...lines,
-        "The goal is reached. Say so in one line. Ask for no confirmation.",
-      ]
-    : lines
+  return [...lines, ...(yield* completed(concept.id, "Proved"))]
 })
 export const replay = (_how: Replay) =>
   Effect.gen(function* () {
@@ -371,21 +356,11 @@ export const confirm = <R = never>(
       return [
         "The learner said this is not their code. Nothing is recorded. Ask which file is theirs.",
       ]
-    const { state, concept } = yield* working
-    const rest = state.path.slice(1)
-    yield* (yield* Progress).update((current) => ({
-      ...current,
-      phase:
-        rest.length === 0
-          ? "Menu"
-          : current.trusted
-            ? "Probing"
-            : "ChoosingMode",
-      path: rest,
-      goal: rest.length === 0 ? "" : current.goal,
-      evidence: { ...current.evidence, [concept.id]: "Explained" },
-    }))
-    return ["The learner confirmed this is their code."]
+    const { concept } = yield* working
+    return [
+      "The learner confirmed this is their code.",
+      ...(yield* completed(concept.id, "Explained")),
+    ]
   })
 
 export const reset = Effect.gen(function* () {
