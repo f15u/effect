@@ -23,10 +23,10 @@ export const errorsInTheType = defineConcept({
     ]
   },
   keyIdea:
-    "Effect<Success, Error> puts the failures in the type. Define the function with Effect.fn, and write `return yield* new MyError()` where you would throw. A caller that uses yield* inherits the error union, so a new error changes the type of every caller.",
+    "Effect<Success, Error> puts the failures in the type. Define the function with Effect.fn, as you learned, and write `return yield* new MyError()` where you would throw. A caller that uses yield* inherits the error union, so a new error changes the type of every caller.",
   hints: [
     "A Promise cannot carry an error in its type. Which type can?",
-    "Define each function with `Effect.fn(function* (token: PaymentToken) { ... })`. Use `yield*` where you used `await`.",
+    "Define each function with `Effect.fn`, and use `yield*` where you used `await`.",
     "Replace `throw new X()` with `return yield* new X()`. In `processPayment`, write `yield* authorizePayment(token)`."
   ]
 })

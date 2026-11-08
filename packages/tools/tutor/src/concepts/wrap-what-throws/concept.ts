@@ -1,11 +1,12 @@
 import { defineConcept } from "../../Concept.ts"
 import { thrownErrorsHide } from "../thrown-errors-hide/concept.ts"
+import { transformWithPipe } from "../transform-with-pipe/concept.ts"
 
 export const wrapWhatThrows = defineConcept({
   dir: import.meta.dirname,
   id: "wrap-what-throws",
   title: "Turning a rejected Promise into a typed error",
-  needs: [thrownErrorsHide],
+  needs: [thrownErrorsHide, transformWithPipe],
   probe: {
     question:
       "A function returns a Promise that can reject. You wrap it with Effect.promise, and the Promise rejects. What happens?",
