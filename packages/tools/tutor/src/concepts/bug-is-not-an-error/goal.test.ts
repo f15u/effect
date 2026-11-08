@@ -5,8 +5,7 @@ import { type Authorization, capturePayment, DoubleCaptureError } from "./main"
 const fresh: Authorization = { id: "pauth_new", status: "authorized" }
 const duplicate: Authorization = { id: "pauth_123", status: "authorized" }
 
-export const noExpectedError: Effect.Effect<Authorization, never> =
-  capturePayment(fresh)
+export const noExpectedError: Effect.Effect<Authorization, never> = capturePayment(fresh)
 
 it("a second capture stops with a defect", async () => {
   const exit = await Effect.runPromiseExit(capturePayment(duplicate))
@@ -21,7 +20,7 @@ it("a second capture is not a typed error", async () => {
   assert.ok(Exit.isFailure(exit))
   assert.ok(
     Result.isFailure(Cause.findError(exit.cause)),
-    "the problem is a typed error",
+    "the problem is a typed error"
   )
 })
 

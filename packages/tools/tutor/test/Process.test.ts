@@ -10,13 +10,13 @@ describe("the process service", () => {
   it.live(
     "a command that does not exist fails with a MissingCommand error",
     () =>
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         const process = yield* Process
         const error = yield* process
           .execute("tutor-no-such-command", [], ".")
           .pipe(Effect.flip)
         assert.strictEqual(error.reason, "MissingCommand")
         assert.include(error.message, "tutor-no-such-command")
-      }).pipe(Effect.provide(Live)),
+      }).pipe(Effect.provide(Live))
   )
 })

@@ -3,12 +3,12 @@ import { assert, it } from "tutorial-test"
 import { answerAll, processPayment } from "./main"
 
 export const handled: Effect.Effect<Response, never> = answerAll(
-  processPayment("tok_authorized"),
+  processPayment("tok_authorized")
 )
 
 const status = (token: Parameters<typeof processPayment>[0]) =>
   Effect.runPromise(answerAll(processPayment(token))).then(
-    (response) => response.status,
+    (response) => response.status
   )
 
 it("each error gets its own reply", async () => {

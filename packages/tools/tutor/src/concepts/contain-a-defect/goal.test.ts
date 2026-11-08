@@ -4,7 +4,7 @@ import { ExpiredCardError, handleRequest, processPayment } from "./main"
 
 it("a known defect becomes a 500 reply", async () => {
   const response = await Effect.runPromise(
-    handleRequest(processPayment("tok_authorized")),
+    handleRequest(processPayment("tok_authorized"))
   ).catch(() => {
     throw new Error("the DoubleCaptureError defect is not handled")
   })
@@ -22,7 +22,7 @@ it("an unknown defect still stops the Effect", async () => {
 
 it("typed errors are left for catchTag", async () => {
   const exit = await Effect.runPromiseExit(
-    handleRequest(processPayment("tok_expiredcard")),
+    handleRequest(processPayment("tok_expiredcard"))
   )
   assert.ok(Exit.isFailure(exit), "the typed error must stay")
   const failure = Cause.findError(exit.cause)

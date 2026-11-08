@@ -7,17 +7,17 @@ import {
   type InvalidTokenError,
   type NetworkError,
   type PaymentToken,
-  processPayment,
+  processPayment
 } from "./main"
 
 type Known = ExpiredCardError | InvalidTokenError | NetworkError
 
 export const typedAuthorize: (
-  token: PaymentToken,
+  token: PaymentToken
 ) => Effect.Effect<Authorization, Known> = authorizePayment
 
 export const typedProcess: (
-  token: PaymentToken,
+  token: PaymentToken
 ) => Effect.Effect<Response, Known> = processPayment
 
 it("a good token succeeds through both functions", async () => {
@@ -29,7 +29,7 @@ it("each bad token reaches the caller as a typed error", async () => {
   const expected = [
     ["tok_expiredcard", "ExpiredCardError"],
     ["tok_invalid", "InvalidTokenError"],
-    ["tok_timeout", "NetworkError"],
+    ["tok_timeout", "NetworkError"]
   ] as const
   for (const [token, tag] of expected) {
     const exit = await Effect.runPromiseExit(processPayment(token))

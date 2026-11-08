@@ -15,7 +15,7 @@ export interface Authorization {
 export class NetworkError extends Data.TaggedError("NetworkError") {}
 
 const providerAuthorize = async (
-  token: PaymentToken,
+  token: PaymentToken
 ): Promise<Authorization> => {
   if (token === "tok_timeout") {
     throw new Error("ETIMEDOUT")
@@ -27,6 +27,5 @@ const providerAuthorize = async (
 }
 
 export const authorizePayment = (
-  token: PaymentToken,
-): Effect.Effect<Authorization, NetworkError> =>
-  Effect.promise(() => providerAuthorize(token))
+  token: PaymentToken
+): Effect.Effect<Authorization, NetworkError> => Effect.promise(() => providerAuthorize(token))

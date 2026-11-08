@@ -2,14 +2,13 @@ import * as NodeServices from "@effect/platform-node/NodeServices"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Path from "effect/Path"
-import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import * as Stream from "effect/Stream"
 
 export const TestLayer = NodeServices.layer
 
-const phaseNames =
-  /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|\bOffering\b|\bFinished\b|Replaying/
+const phaseNames = /ChoosingMode|\bMenu\b|\bProbing\b|\bWorking\b|ProjectWork|\bOffering\b|\bFinished\b|Replaying/
 
 const bannedWords = /retell|payoff/i
 
@@ -17,13 +16,13 @@ const clean = <A extends { readonly out: string }>(result: A) =>
   result.out.includes("[object Object]")
     ? Effect.die(new Error(`[object Object] in output:\n${result.out}`))
     : bannedWords.test(result.out)
-      ? Effect.die(new Error(`banned word in output:\n${result.out}`))
-      : phaseNames.test(result.out)
-        ? Effect.die(new Error(`phase name in output:\n${result.out}`))
-        : Effect.succeed(result)
+    ? Effect.die(new Error(`banned word in output:\n${result.out}`))
+    : phaseNames.test(result.out)
+    ? Effect.die(new Error(`phase name in output:\n${result.out}`))
+    : Effect.succeed(result)
 
 export const session = (options: { readonly npm?: boolean } = {}) =>
-  Effect.gen(function* () {
+  Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
@@ -36,39 +35,38 @@ export const session = (options: { readonly npm?: boolean } = {}) =>
       yield* fs.writeFileString(
         path.join(bin, "npm"),
         `#!/bin/sh\necho "$PWD :: $@" >> "${installLog}"\n`,
-        { mode: 0o755 },
+        { mode: 0o755 }
       )
     }
     const cli = path.resolve(import.meta.dirname, "../src/cli.ts")
 
     const t = (...args: ReadonlyArray<string>) =>
       Effect.scoped(
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           const handle = yield* spawner.spawn(
             ChildProcess.make(
               process.execPath,
-              ["--no-warnings", cli, ...args],
+              ["--no-warnings", cli, "learn", ...args],
               {
                 cwd: dir,
                 stdin: "ignore",
                 env: {
-                  PATH:
-                    options.npm === false ? bin : `${bin}:${process.env.PATH}`,
+                  PATH: options.npm === false ? bin : `${bin}:${process.env.PATH}`
                 },
-                extendEnv: true,
-              },
-            ),
+                extendEnv: true
+              }
+            )
           )
           const [stdout, stderr, code] = yield* Effect.all(
             [
               handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
               handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
-              handle.exitCode,
+              handle.exitCode
             ],
-            { concurrency: "unbounded" },
+            { concurrency: "unbounded" }
           )
           return { out: stdout + stderr, code: Number(code) }
-        }),
+        })
       ).pipe(Effect.orDie, Effect.flatMap(clean))
 
     const files = fs.readDirectory(dir)

@@ -1,20 +1,11 @@
 import { Cause, Effect, Exit, Result } from "effect"
 import { assert, it } from "tutorial-test"
-import {
-  answerTimeout,
-  checkExpiry,
-  describe,
-  ExpiredCardError,
-  NetworkError,
-  readStatus,
-} from "./main"
+import { answerTimeout, checkExpiry, describe, ExpiredCardError, NetworkError, readStatus } from "./main"
 
-export const expiryType: Effect.Effect<void, ExpiredCardError> =
-  checkExpiry(true)
-export const statusType: Effect.Effect<"authorized" | "declined", never> =
-  readStatus("authorized")
+export const expiryType: Effect.Effect<void, ExpiredCardError> = checkExpiry(true)
+export const statusType: Effect.Effect<"authorized" | "declined", never> = readStatus("authorized")
 export const timeoutType: Effect.Effect<Response, never> = answerTimeout(
-  Effect.fail(new NetworkError()),
+  Effect.fail(new NetworkError())
 )
 export const describeType: Effect.Effect<string, never> = describe("declined")
 
@@ -31,20 +22,20 @@ it("an unknown status is a defect", async () => {
   assert.ok(Exit.isFailure(exit))
   assert.ok(
     Result.isSuccess(Cause.findDefect(exit.cause)),
-    "an unknown status is not a defect",
+    "an unknown status is not a defect"
   )
 })
 
 it("a known status is a value", async () => {
   assert.strictEqual(
     await Effect.runPromise(readStatus("declined")),
-    "declined",
+    "declined"
   )
 })
 
 it("a provider timeout gets a 503 reply", async () => {
   const response = await Effect.runPromise(
-    answerTimeout(Effect.fail(new NetworkError())),
+    answerTimeout(Effect.fail(new NetworkError()))
   )
   assert.strictEqual(response.status, 503)
 })

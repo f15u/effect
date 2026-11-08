@@ -17,7 +17,7 @@ export class InvalidTokenError extends Error {}
 export class NetworkError extends Error {}
 
 export const authorizePayment = async (
-  token: PaymentToken,
+  token: PaymentToken
 ): Promise<Authorization> => {
   if (token === "tok_expiredcard") {
     throw new ExpiredCardError()
@@ -37,7 +37,7 @@ export const authorizePayment = async (
 }
 
 export const processPayment = async (
-  token: PaymentToken,
+  token: PaymentToken
 ): Promise<Response> => {
   try {
     const authorization = await authorizePayment(token)

@@ -18,7 +18,7 @@ export class InvalidTokenError extends Data.TaggedError("InvalidTokenError") {}
 
 export class NetworkError extends Data.TaggedError("NetworkError") {}
 
-export const authorizePayment = Effect.fn(function* (token: PaymentToken) {
+export const authorizePayment = Effect.fn(function*(token: PaymentToken) {
   if (token === "tok_expiredcard") {
     return yield* new ExpiredCardError()
   }
@@ -31,23 +31,21 @@ export const authorizePayment = Effect.fn(function* (token: PaymentToken) {
     return yield* new NetworkError()
   }
 
-  const authorization: Authorization =
-    token === "tok_declined"
-      ? { id: "pauth_456", status: "declined" }
-      : { id: "pauth_123", status: "authorized" }
+  const authorization: Authorization = token === "tok_declined"
+    ? { id: "pauth_456", status: "declined" }
+    : { id: "pauth_123", status: "authorized" }
 
   return authorization
 })
 
-export const processPayment = Effect.fn(function* (token: PaymentToken) {
+export const processPayment = Effect.fn(function*(token: PaymentToken) {
   const authorization = yield* authorizePayment(token)
   return Response.json(authorization)
 })
 
-export const reconcile = (token: PaymentToken) =>
-  processPayment(token).pipe(Effect.orDie)
+export const reconcile = (token: PaymentToken) => processPayment(token).pipe(Effect.orDie)
 
 export const reconcileSelected = (token: PaymentToken) =>
   processPayment(token).pipe(
-    Effect.catchTag("ExpiredCardError", (error) => Effect.die(error)),
+    Effect.catchTag("ExpiredCardError", (error) => Effect.die(error))
   )

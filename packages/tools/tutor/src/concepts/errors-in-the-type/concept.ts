@@ -14,19 +14,19 @@ export const errorsInTheType = defineConcept({
     distractors: [
       {
         text: "never, because processPayment does not raise an error itself.",
-        belief: "An error stays with the function that raises it.",
+        belief: "An error stays with the function that raises it."
       },
       {
         text: "unknown, because TypeScript cannot follow a function call.",
-        belief: "Types do not pass through a function call.",
-      },
-    ],
+        belief: "Types do not pass through a function call."
+      }
+    ]
   },
   keyIdea:
     "Effect<Success, Error> puts the failures in the type. Define the function with Effect.fn, and write `return yield* new MyError()` where you would throw. A caller that uses yield* inherits the error union, so a new error changes the type of every caller.",
   hints: [
     "A Promise cannot carry an error in its type. Which type can?",
     "Define each function with `Effect.fn(function* (token: PaymentToken) { ... })`. Use `yield*` where you used `await`.",
-    "Replace `throw new X()` with `return yield* new X()`. In `processPayment`, write `yield* authorizePayment(token)`.",
-  ],
+    "Replace `throw new X()` with `return yield* new X()`. In `processPayment`, write `yield* authorizePayment(token)`."
+  ]
 })

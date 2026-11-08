@@ -13,7 +13,7 @@ const failureOf = async (token: Parameters<typeof authorizePayment>[0]) => {
 it("each error has a tag with its own name", async () => {
   assert.strictEqual(
     (await failureOf("tok_expiredcard"))._tag,
-    "ExpiredCardError",
+    "ExpiredCardError"
   )
   assert.strictEqual((await failureOf("tok_invalid"))._tag, "InvalidTokenError")
   assert.strictEqual((await failureOf("tok_timeout"))._tag, "NetworkError")

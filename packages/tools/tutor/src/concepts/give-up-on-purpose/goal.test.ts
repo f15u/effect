@@ -1,15 +1,8 @@
 import { Cause, Effect, Exit, Result } from "effect"
 import { assert, it } from "tutorial-test"
-import {
-  ExpiredCardError,
-  type InvalidTokenError,
-  NetworkError,
-  reconcile,
-  reconcileSelected,
-} from "./main"
+import { ExpiredCardError, type InvalidTokenError, NetworkError, reconcile, reconcileSelected } from "./main"
 
-export const allFatal: Effect.Effect<Response, never> =
-  reconcile("tok_authorized")
+export const allFatal: Effect.Effect<Response, never> = reconcile("tok_authorized")
 export const someFatal: Effect.Effect<
   Response,
   InvalidTokenError | NetworkError
@@ -26,14 +19,14 @@ const defectOf = async (effect: Effect.Effect<Response, unknown>) => {
 it("reconcile turns every typed error into a defect", async () => {
   assert.ok((await defectOf(reconcile("tok_timeout"))) instanceof NetworkError)
   assert.ok(
-    (await defectOf(reconcile("tok_expiredcard"))) instanceof ExpiredCardError,
+    (await defectOf(reconcile("tok_expiredcard"))) instanceof ExpiredCardError
   )
 })
 
 it("reconcileSelected turns only an expired card into a defect", async () => {
   assert.ok(
     (await defectOf(reconcileSelected("tok_expiredcard"))) instanceof
-      ExpiredCardError,
+      ExpiredCardError
   )
 })
 

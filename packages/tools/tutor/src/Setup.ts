@@ -1,13 +1,13 @@
-import type { PlatformError } from "effect/PlatformError"
 import * as Config from "effect/Config"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Path from "effect/Path"
-import * as Stream from "effect/Stream"
-import * as Terminal from "effect/Terminal"
+import type { PlatformError } from "effect/PlatformError"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import * as Stream from "effect/Stream"
+import * as Terminal from "effect/Terminal"
 import { TutorError } from "./TutorError.ts"
 
 interface Plan {
@@ -23,40 +23,43 @@ interface Plan {
 
 const runCommand = (line: string) => {
   const [command, ...args] = line.split(" ")
-  return Effect.gen(function* () {
+  return Effect.gen(function*() {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     yield* Effect.scoped(
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         const handle = yield* spawner.spawn(
-          ChildProcess.make(command!, args, { stdin: "ignore" }),
+          ChildProcess.make(command!, args, { stdin: "ignore" })
         )
         const code = Number(yield* handle.exitCode)
-        if (code !== 0)
+        if (code !== 0) {
           return yield* new TutorError({
             reason: "SetupFailed",
-            message: `${line} exited with code ${code}.`,
+            message: `${line} exited with code ${code}.`
           })
-      }),
+        }
+      })
     )
   })
 }
 
-const claudeCommand = "claude mcp add --scope project tutor -- tutor mcp"
+const claudeCommand = "claude mcp add --scope project tutor -- effect-tutor learn mcp"
 
 const claudePlan: Plan = {
   label: "Claude Code",
-  why: "This registers the Tutor CLI as an MCP server for this folder, so Claude Code can call it. The command writes a .mcp.json file here. The learner must approve the project .mcp.json once, when Claude Code first asks.",
+  why:
+    "This registers the Tutor CLI as an MCP server for this folder, so Claude Code can call it. The command writes a .mcp.json file here. The learner must approve the project .mcp.json once, when Claude Code first asks.",
   show: [claudeCommand],
-  apply: runCommand(claudeCommand),
+  apply: runCommand(claudeCommand)
 }
 
-const codexCommand = "codex mcp add tutor -- tutor mcp"
+const codexCommand = "codex mcp add tutor -- effect-tutor learn mcp"
 
 const codexPlan: Plan = {
   label: "Codex",
-  why: "This registers the Tutor CLI as an MCP server in your Codex user config (~/.codex/config.toml), so Codex can call it.",
+  why:
+    "This registers the Tutor CLI as an MCP server in your Codex user config (~/.codex/config.toml), so Codex can call it.",
   show: [codexCommand],
-  apply: runCommand(codexCommand),
+  apply: runCommand(codexCommand)
 }
 
 const opencodeFile = "opencode.json"
@@ -64,48 +67,49 @@ const opencodeFile = "opencode.json"
 const opencodeConfig = (major: number) =>
   major >= 2
     ? {
-        mcp: {
-          servers: { tutor: { type: "local", command: ["tutor", "mcp"] } },
-        },
+      mcp: {
+        servers: { tutor: { type: "local", command: ["effect-tutor", "learn", "mcp"] } }
       }
+    }
     : {
-        $schema: "https://opencode.ai/config.json",
-        mcp: {
-          tutor: { type: "local", command: ["tutor", "mcp"], enabled: true },
-        },
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        tutor: { type: "local", command: ["effect-tutor", "learn", "mcp"], enabled: true }
       }
+    }
 
-const opencodeMajor = Effect.gen(function* () {
+const opencodeMajor = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const text = yield* Effect.scoped(
-    Effect.gen(function* () {
+    Effect.gen(function*() {
       const handle = yield* spawner.spawn(
-        ChildProcess.make("opencode", ["--version"], { stdin: "ignore" }),
+        ChildProcess.make("opencode", ["--version"], { stdin: "ignore" })
       )
       return yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString)
-    }),
+    })
   )
   return Number(/(\d+)\./.exec(text)?.[1] ?? 1)
 })
 
-const opencodePlan = Effect.gen(function* () {
+const opencodePlan = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   if (yield* fs.exists(opencodeFile)) return undefined
   const json = JSON.stringify(opencodeConfig(yield* opencodeMajor), null, 2)
   const plan: Plan = {
     label: "opencode",
-    why: `This creates ${opencodeFile} in this folder. It registers the Tutor CLI as an MCP server, so opencode can call it.`,
+    why:
+      `This creates ${opencodeFile} in this folder. It registers the Tutor CLI as an MCP server, so opencode can call it.`,
     show: [`Create ${opencodeFile} with:`, json],
-    apply: fs.writeFileString(opencodeFile, `${json}\n`),
+    apply: fs.writeFileString(opencodeFile, `${json}\n`)
   }
   return plan
 })
 
-const onPath = Effect.fn("Setup.onPath")(function* (name: string) {
+const onPath = Effect.fn("Setup.onPath")(function*(name: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const dirs = (yield* Config.String("PATH").pipe(
-    Config.withDefault(""),
+    Config.withDefault("")
   )).split(":")
   for (const dir of dirs) {
     if (dir !== "" && (yield* fs.exists(path.join(dir, name)))) return true
@@ -115,7 +119,7 @@ const onPath = Effect.fn("Setup.onPath")(function* (name: string) {
 
 const isYes = (answer: string) => /^y(es)?$/i.test(answer.trim())
 
-const offer = Effect.fn("Setup.offer")(function* (plan: Plan) {
+const offer = Effect.fn("Setup.offer")(function*(plan: Plan) {
   const terminal = yield* Terminal.Terminal
   yield* Console.log(`\n${plan.label}\n${plan.show.join("\n")}\n${plan.why}`)
   yield* terminal.display("Apply this? [y/N] ")
@@ -123,38 +127,39 @@ const offer = Effect.fn("Setup.offer")(function* (plan: Plan) {
   if (isYes(answer)) {
     const failure = yield* plan.apply.pipe(
       Effect.as(undefined),
-      Effect.catch((error) => Effect.succeed(error.message)),
+      Effect.catch((error) => Effect.succeed(error.message))
     )
     if (failure === undefined) {
       yield* Console.log(`Done: ${plan.label}.`)
     } else {
       yield* Console.log(
-        `Failed: ${plan.label}. ${failure}\nRun this yourself:\n${plan.show.join("\n")}`,
+        `Failed: ${plan.label}. ${failure}\nRun this yourself:\n${plan.show.join("\n")}`
       )
     }
   } else {
     yield* Console.log(
-      `Nothing changed.\nRun this yourself:\n${plan.show.join("\n")}`,
+      `Nothing changed.\nRun this yourself:\n${plan.show.join("\n")}`
     )
   }
 })
 
-export const setup = Effect.gen(function* () {
+export const setup = Effect.gen(function*() {
   const found = {
     claude: yield* onPath("claude"),
     opencode: yield* onPath("opencode"),
-    codex: yield* onPath("codex"),
+    codex: yield* onPath("codex")
   }
   if (!found.claude && !found.opencode && !found.codex) {
     yield* Console.log(
-      "No agent found. Looked for claude, opencode and codex on your PATH. Nothing changed.",
+      "No agent found. Looked for claude, opencode and codex on your PATH. Nothing changed."
     )
     return
   }
-  if (!(yield* onPath("tutor")))
+  if (!(yield* onPath("effect-tutor"))) {
     yield* Console.log(
-      "`tutor` is not on your PATH. The agents start `tutor mcp`, so they cannot find it until you install the Tutor CLI so that `tutor` runs from any folder.",
+      "`effect-tutor` is not on your PATH. The agents start `effect-tutor learn mcp`, so they cannot find it until you install @effect/tutor so that `effect-tutor` runs from any folder."
     )
+  }
   if (found.claude) yield* offer(claudePlan)
   if (found.opencode) {
     const plan = yield* opencodePlan
@@ -162,7 +167,9 @@ export const setup = Effect.gen(function* () {
       yield* offer(plan)
     } else {
       yield* Console.log(
-        `\nopencode\n${opencodeFile} already exists here, so setup does not touch it. Add the Tutor CLI under "mcp" yourself:\n${JSON.stringify(opencodeConfig(yield* opencodeMajor), null, 2)}`,
+        `\nopencode\n${opencodeFile} already exists here, so setup does not touch it. Add the Tutor CLI under "mcp" yourself:\n${
+          JSON.stringify(opencodeConfig(yield* opencodeMajor), null, 2)
+        }`
       )
     }
   }

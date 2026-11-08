@@ -24,5 +24,5 @@ async function run() {
       results.push({ name, passed: false, message })
     }
   }
-  console.log(`TUTOR_RESULT ${JSON.stringify(results)}`)
+  process.stdout.write(`TUTOR_RESULT ${JSON.stringify(results)}\n`)
 }

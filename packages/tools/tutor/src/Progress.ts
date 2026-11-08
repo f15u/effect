@@ -13,7 +13,7 @@ export const Phase = Schema.Literals([
   "ChoosingMode",
   "Working",
   "Replaying",
-  "ProjectWork",
+  "ProjectWork"
 ])
 export type Phase = typeof Phase.Type
 
@@ -27,7 +27,7 @@ export const State = Schema.Struct({
   exercise: Schema.String,
   hints: Schema.Number,
   evidence: Schema.Record(Schema.String, Level),
-  trusted: Schema.optionalKey(Schema.Boolean),
+  trusted: Schema.optionalKey(Schema.Boolean)
 })
 export type State = typeof State.Type
 
@@ -37,7 +37,7 @@ export const emptyState: State = {
   path: [],
   exercise: "",
   hints: 0,
-  evidence: {},
+  evidence: {}
 }
 
 const Json = Schema.fromJsonString(State)
@@ -48,32 +48,32 @@ export class Progress extends Context.Service<
     readonly exists: Effect.Effect<boolean>
     readonly read: Effect.Effect<State, TutorError>
     readonly update: (
-      f: (state: State) => State,
+      f: (state: State) => State
     ) => Effect.Effect<State, TutorError>
   }
 >()("tutor/Progress", {
-  make: Effect.gen(function* () {
+  make: Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
 
     const exists = fs.exists(stateFile).pipe(Effect.orDie)
 
-    const read = Effect.gen(function* () {
+    const read = Effect.gen(function*() {
       if (!(yield* fs.exists(stateFile))) return emptyState
       return yield* Schema.decodeUnknownEffect(Json)(
-        yield* fs.readFileString(stateFile),
+        yield* fs.readFileString(stateFile)
       )
     }).pipe(
       Effect.mapError(
         () =>
           new TutorError({
             reason: "BadState",
-            message: `${stateFile} cannot be read. Ask the learner to fix or delete it, then run the command again.`,
-          }),
-      ),
+            message: `${stateFile} cannot be read. Ask the learner to fix or delete it, then run the command again.`
+          })
+      )
     )
 
-    const update = Effect.fn("Progress.update")(function* (
-      f: (state: State) => State,
+    const update = Effect.fn("Progress.update")(function*(
+      f: (state: State) => State
     ) {
       const next = f(yield* read)
       const text = yield* Schema.encodeEffect(Json)(next).pipe(Effect.orDie)
@@ -82,7 +82,7 @@ export class Progress extends Context.Service<
     })
 
     return { exists, read, update }
-  }),
+  })
 }) {
   static readonly layer = Layer.effect(this, this.make)
 }

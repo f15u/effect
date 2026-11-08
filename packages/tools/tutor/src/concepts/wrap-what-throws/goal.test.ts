@@ -4,7 +4,7 @@ import { authorizePayment, NetworkError } from "./main"
 
 it("a good token succeeds", async () => {
   const authorization = await Effect.runPromise(
-    authorizePayment("tok_authorized"),
+    authorizePayment("tok_authorized")
   )
   assert.strictEqual(authorization.id, "pauth_123")
 })

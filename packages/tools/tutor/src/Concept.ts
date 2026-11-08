@@ -4,8 +4,8 @@ const Probe = Schema.Struct({
   question: Schema.String,
   correct: Schema.String,
   distractors: Schema.Array(
-    Schema.Struct({ text: Schema.String, belief: Schema.String }),
-  ),
+    Schema.Struct({ text: Schema.String, belief: Schema.String })
+  )
 })
 
 const ConceptData = Schema.Struct({
@@ -14,7 +14,7 @@ const ConceptData = Schema.Struct({
   goal: Schema.optionalKey(Schema.String),
   probe: Probe,
   keyIdea: Schema.String,
-  hints: Schema.Array(Schema.String),
+  hints: Schema.Array(Schema.String)
 })
 
 export interface Concept extends Schema.Schema.Type<typeof ConceptData> {
@@ -27,7 +27,7 @@ export const notSure = "I am not sure."
 export const probeOptions = (concept: Concept): ReadonlyArray<string> => [
   concept.probe.correct,
   ...concept.probe.distractors.map((item) => item.text),
-  notSure,
+  notSure
 ]
 
 export const defineConcept = (concept: Concept): Concept => {

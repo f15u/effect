@@ -18,7 +18,7 @@ export class InvalidTokenError extends Error {}
 
 export class NetworkError extends Error {}
 
-export const authorizePayment = Effect.fn(function* (token: PaymentToken) {
+export const authorizePayment = Effect.fn(function*(token: PaymentToken) {
   if (token === "tok_expiredcard") {
     return yield* Effect.fail(new ExpiredCardError())
   }
@@ -31,10 +31,9 @@ export const authorizePayment = Effect.fn(function* (token: PaymentToken) {
     return yield* Effect.fail(new NetworkError())
   }
 
-  const authorization: Authorization =
-    token === "tok_declined"
-      ? { id: "pauth_456", status: "declined" }
-      : { id: "pauth_123", status: "authorized" }
+  const authorization: Authorization = token === "tok_declined"
+    ? { id: "pauth_456", status: "declined" }
+    : { id: "pauth_123", status: "authorized" }
 
   return authorization
 })

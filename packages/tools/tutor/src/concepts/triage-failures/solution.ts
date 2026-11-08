@@ -7,8 +7,7 @@ export class NetworkError extends Data.TaggedError("NetworkError") {}
 export type Status = "authorized" | "declined"
 
 // The caller shows "Card expired" to the customer.
-export const checkExpiry = (expired: boolean) =>
-  expired ? Effect.fail(new ExpiredCardError()) : Effect.void
+export const checkExpiry = (expired: boolean) => expired ? Effect.fail(new ExpiredCardError()) : Effect.void
 
 // An unknown status is a bug in the provider contract.
 export const readStatus = (raw: string) =>
@@ -21,11 +20,9 @@ export const answerTimeout = (self: Effect.Effect<Response, NetworkError>) =>
   self.pipe(
     Effect.catchTag("NetworkError", () =>
       Effect.succeed(
-        new Response("Payment provider unavailable", { status: 503 }),
-      ),
-    ),
+        new Response("Payment provider unavailable", { status: 503 })
+      ))
   )
 
 // A declined card is a normal result.
-export const describe = (status: Status) =>
-  Effect.succeed(status === "declined" ? "Declined" : "Paid")
+export const describe = (status: Status) => Effect.succeed(status === "declined" ? "Declined" : "Paid")
