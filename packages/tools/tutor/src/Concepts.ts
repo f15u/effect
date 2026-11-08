@@ -1,8 +1,11 @@
 import { bugIsNotAnError } from "./concepts/bug-is-not-an-error/concept.ts"
 import { containADefect } from "./concepts/contain-a-defect/concept.ts"
+import { decodeAtTheBoundary } from "./concepts/decode-at-the-boundary/concept.ts"
 import { defineAService } from "./concepts/define-a-service/concept.ts"
 import { dependenciesInTheType } from "./concepts/dependencies-in-the-type/concept.ts"
+import { describeDataOnce } from "./concepts/describe-data-once/concept.ts"
 import { effectIsADescription } from "./concepts/effect-is-a-description/concept.ts"
+import { encodeForTheWire } from "./concepts/encode-for-the-wire/concept.ts"
 import { errorsInTheType } from "./concepts/errors-in-the-type/concept.ts"
 import { functionsWithEffectFn } from "./concepts/functions-with-effect-fn/concept.ts"
 import { giveUpOnPurpose } from "./concepts/give-up-on-purpose/concept.ts"
@@ -13,12 +16,15 @@ import { layersThatNeedLayers } from "./concepts/layers-that-need-layers/concept
 import { namedErrors } from "./concepts/named-errors/concept.ts"
 import { provideWithALayer } from "./concepts/provide-with-a-layer/concept.ts"
 import { readTheThreeTypes } from "./concepts/read-the-three-types/concept.ts"
+import { refineAndBrand } from "./concepts/refine-and-brand/concept.ts"
 import { runAtTheEdge } from "./concepts/run-at-the-edge/concept.ts"
+import { schemaErrors } from "./concepts/schema-errors/concept.ts"
 import { sequenceWithGen } from "./concepts/sequence-with-gen/concept.ts"
 import { swapForATest } from "./concepts/swap-for-a-test/concept.ts"
 import { thrownErrorsHide } from "./concepts/thrown-errors-hide/concept.ts"
 import { transformWithPipe } from "./concepts/transform-with-pipe/concept.ts"
 import { triageFailures } from "./concepts/triage-failures/concept.ts"
+import { trustNothingFromOutside } from "./concepts/trust-nothing-from-outside/concept.ts"
 import { wrapWhatThrows } from "./concepts/wrap-what-throws/concept.ts"
 
 export const concepts = [
@@ -43,5 +49,11 @@ export const concepts = [
   defineAService,
   provideWithALayer,
   swapForATest,
-  layersThatNeedLayers
+  layersThatNeedLayers,
+  trustNothingFromOutside,
+  describeDataOnce,
+  decodeAtTheBoundary,
+  encodeForTheWire,
+  refineAndBrand,
+  schemaErrors
 ] as const
