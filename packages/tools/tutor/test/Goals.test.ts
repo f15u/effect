@@ -47,7 +47,7 @@ describe("every goal walks to finished", () => {
         assert.strictEqual(state.evidence[goal.id], "Proved")
         assert.strictEqual(state.goal, "")
       }),
-      120_000
+      graph.path([goal.id], new Set()).length * 30_000
     )
   }
 })
