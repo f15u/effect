@@ -1,16 +1,17 @@
-import { fileURLToPath } from "node:url"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
 import * as Path from "effect/Path"
 import * as Schema from "effect/Schema"
+import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
 import { Process } from "./Process.ts"
 
 const Case = Schema.Struct({
   name: Schema.String,
   passed: Schema.Boolean,
-  message: Schema.optionalKey(Schema.String),
+  message: Schema.optionalKey(Schema.String)
 })
 export type Case = typeof Case.Type
 
@@ -30,9 +31,9 @@ const tsconfig = JSON.stringify({
     module: "nodenext",
     moduleResolution: "nodenext",
     skipLibCheck: true,
-    allowImportingTsExtensions: true,
+    allowImportingTsExtensions: true
   },
-  files: ["main.ts", "main.test.ts"],
+  files: ["main.ts", "main.test.ts"]
 })
 
 const marker = "TUTOR_RESULT "
@@ -45,7 +46,7 @@ export const renderCheck = (result: CheckResult): ReadonlyArray<string> => {
       return [
         "TYPE ERRORS",
         ...result.lines.map((line) => `  ${line}`),
-        "Ask the learner what the first error means. Do not fix it.",
+        "Ask the learner what the first error means. Do not fix it."
       ]
     case "TestsFailed":
       return [
@@ -53,9 +54,9 @@ export const renderCheck = (result: CheckResult): ReadonlyArray<string> => {
         ...result.cases.map((item) =>
           item.passed
             ? `  ok   ${item.name}`
-            : `  FAIL ${item.name}${item.message === undefined ? "" : `\n         ${item.message}`}`,
+            : `  FAIL ${item.name}${item.message === undefined ? "" : `\n         ${item.message}`}`
         ),
-        "Ask the learner a question about the first failure. Do not fix it.",
+        "Ask the learner a question about the first failure. Do not fix it."
       ]
     case "Crashed":
       return ["NOT YET: the file crashed.", result.message]
@@ -68,16 +69,24 @@ export class Checker extends Context.Service<
     readonly run: (test: string, source: string) => Effect.Effect<CheckResult>
   }
 >()("tutor/Checker", {
-  make: Effect.gen(function* () {
+  make: Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const process = yield* Process
     const src = import.meta.dirname
     const shim = path.resolve(src, "tutorial-test.mjs")
     const tsc = fileURLToPath(import.meta.resolve("typescript/bin/tsc"))
-    const effectDir = path.dirname(
-      fileURLToPath(import.meta.resolve("effect/package.json")),
-    )
+    const localEffect = () => {
+      try {
+        return path.dirname(
+          createRequire(path.join(globalThis.process.cwd(), "noop.js")).resolve(
+            "effect/package.json"
+          )
+        )
+      } catch {
+        return undefined
+      }
+    }
 
     const prepareTest = (test: string) =>
       test
@@ -85,16 +94,19 @@ export class Checker extends Context.Service<
         .replace(`"./main"`, `"./main.ts"`)
 
     const run = Effect.fn("Checker.run")(
-      function* (test: string, source: string) {
+      function*(test: string, source: string) {
         const dir = yield* fs.makeTempDirectoryScoped({
-          prefix: "tutor-check-",
+          prefix: "tutor-check-"
         })
-        yield* fs.makeDirectory(path.join(dir, "node_modules"))
-        yield* fs.symlink(effectDir, path.join(dir, "node_modules", "effect"))
+        const effectDir = localEffect()
+        if (effectDir !== undefined) {
+          yield* fs.makeDirectory(path.join(dir, "node_modules"))
+          yield* fs.symlink(effectDir, path.join(dir, "node_modules", "effect"))
+        }
         yield* fs.writeFileString(path.join(dir, "main.ts"), source)
         yield* fs.writeFileString(
           path.join(dir, "main.test.ts"),
-          prepareTest(test),
+          prepareTest(test)
         )
         yield* fs.writeFileString(path.join(dir, "tsconfig.json"), tsconfig)
 
@@ -106,7 +118,7 @@ export class Checker extends Context.Service<
             .map((line) =>
               line.startsWith("main.test.ts")
                 ? `The goal test expects a different type: ${line}`
-                : line,
+                : line
             )
           return { _tag: "TypeErrors", lines } as const
         }
@@ -114,7 +126,7 @@ export class Checker extends Context.Service<
         const tests = yield* process.execute(
           "node",
           ["--no-warnings", "main.test.ts"],
-          dir,
+          dir
         )
         const line = tests.stdout
           .split("\n")
@@ -122,24 +134,24 @@ export class Checker extends Context.Service<
         if (line === undefined) {
           return {
             _tag: "Crashed",
-            message: (tests.stderr || tests.stdout).trim().slice(0, 1500),
+            message: (tests.stderr || tests.stdout).trim().slice(0, 1500)
           } as const
         }
         const cases = yield* Schema.decodeUnknownEffect(Cases)(
-          line.slice(marker.length),
+          line.slice(marker.length)
         )
         return cases.every((item) => item.passed)
           ? ({ _tag: "Passed", cases } as const)
           : ({ _tag: "TestsFailed", cases } as const)
       },
       Effect.scoped,
-      Effect.orDie,
+      Effect.orDie
     )
 
     return { run }
-  }),
+  })
 }) {
   static readonly layer = Layer.effect(this, this.make).pipe(
-    Layer.provide(Process.layer),
+    Layer.provide(Process.layer)
   )
 }
