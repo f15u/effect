@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../../tsconfig.base.json",
+  "include": ["src"],
+  "references": [
+    { "path": "../../effect" },
+    { "path": "../../platform/node" }
+  ],
+  "exclude": [
+    "src/concepts/**/starter.ts",
+    "src/concepts/**/solution.ts",
+    "src/concepts/**/goal.test.ts"
+  ],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": ["ESNext"],
+    "types": ["node"]
+  }
+}

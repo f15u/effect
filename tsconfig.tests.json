@@ -105,6 +105,7 @@
       "@effect/graphql-generator/*": ["./packages/tools/graphql-generator/src/*.ts"],
       "@effect/oxc": ["./packages/tools/oxc/src/index.ts"],
       "@effect/oxc/*": ["./packages/tools/oxc/src/*.ts"],
+      "@effect/tutor/*": ["./packages/tools/tutor/src/*.ts"],
       "@effect/tools-utils": ["./packages/tools/utils/src/index.ts"],
       "@effect/tools-utils/*": ["./packages/tools/utils/src/*.ts"],
       "@effect/vitest": ["./packages/vitest/src/index.ts"],

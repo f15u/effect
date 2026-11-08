@@ -1,0 +1,47 @@
+{
+  "name": "@effect/tutor",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Learn Effect with an AI tutor",
+  "engines": {
+    "node": ">=24"
+  },
+  "homepage": "https://effect.website",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Effect-TS/effect.git",
+    "directory": "packages/tools/tutor"
+  },
+  "sideEffects": [],
+  "bin": {
+    "effect-tutor": "./src/cli.ts"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*",
+    "!dist/**/*.tsbuildinfo"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "bin": {
+      "effect-tutor": "./dist/cli.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json && node copy-assets.mjs",
+    "check": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "workspace:^",
+    "effect": "workspace:^",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@effect/vitest": "workspace:^",
+    "@types/node": "^26.6.6"
+  }
+}

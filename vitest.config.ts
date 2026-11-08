@@ -229,7 +229,11 @@ export default defineConfig({
       ...project("@effect/openapi-generator", "packages/tools/openapi-generator"),
       ...project("@effect/graphql-generator", "packages/tools/graphql-generator"),
       ...project("@effect/utils", "packages/tools/utils", isNode),
-      ...project("@effect/oxc", "packages/tools/oxc")
+      ...project("@effect/oxc", "packages/tools/oxc"),
+      ...project("@effect/tutor", "packages/tools/tutor", isNode, { test: { testTimeout: 60_000 } }, [
+        ...exclude,
+        "src/concepts/**"
+      ])
     ]
   }
 })
