@@ -31,7 +31,8 @@ const tsconfig = JSON.stringify({
     module: "nodenext",
     moduleResolution: "nodenext",
     skipLibCheck: true,
-    allowImportingTsExtensions: true
+    allowImportingTsExtensions: true,
+    types: ["node"]
   },
   files: ["main.ts", "main.test.ts"]
 })
@@ -76,6 +77,9 @@ export class Checker extends Context.Service<
     const src = import.meta.dirname
     const shim = path.resolve(src, "tutorial-test.mjs")
     const tsc = fileURLToPath(import.meta.resolve("typescript/bin/tsc"))
+    const nodeTypes = path.dirname(
+      fileURLToPath(import.meta.resolve("@types/node/package.json"))
+    )
     const localEffect = () => {
       try {
         return path.dirname(
@@ -99,8 +103,11 @@ export class Checker extends Context.Service<
           prefix: "tutor-check-"
         })
         const effectDir = localEffect()
+        yield* fs.makeDirectory(path.join(dir, "node_modules", "@types"), {
+          recursive: true
+        })
+        yield* fs.symlink(nodeTypes, path.join(dir, "node_modules", "@types", "node"))
         if (effectDir !== undefined) {
-          yield* fs.makeDirectory(path.join(dir, "node_modules"))
           yield* fs.symlink(effectDir, path.join(dir, "node_modules", "effect"))
         }
         yield* fs.writeFileString(path.join(dir, "main.ts"), source)

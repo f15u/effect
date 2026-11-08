@@ -1,4 +1,6 @@
+import { apiIsAContract } from "./concepts/api-is-a-contract/concept.ts"
 import { bugIsNotAnError } from "./concepts/bug-is-not-an-error/concept.ts"
+import { callItTyped } from "./concepts/call-it-typed/concept.ts"
 import { containADefect } from "./concepts/contain-a-defect/concept.ts"
 import { decodeAtTheBoundary } from "./concepts/decode-at-the-boundary/concept.ts"
 import { defineAService } from "./concepts/define-a-service/concept.ts"
@@ -6,12 +8,14 @@ import { dependenciesInTheType } from "./concepts/dependencies-in-the-type/conce
 import { describeDataOnce } from "./concepts/describe-data-once/concept.ts"
 import { effectIsADescription } from "./concepts/effect-is-a-description/concept.ts"
 import { encodeForTheWire } from "./concepts/encode-for-the-wire/concept.ts"
+import { errorsBecomeStatuses } from "./concepts/errors-become-statuses/concept.ts"
 import { errorsInTheType } from "./concepts/errors-in-the-type/concept.ts"
 import { functionsWithEffectFn } from "./concepts/functions-with-effect-fn/concept.ts"
 import { giveUpOnPurpose } from "./concepts/give-up-on-purpose/concept.ts"
 import { handleAllErrors } from "./concepts/handle-all-errors/concept.ts"
 import { handleOneError } from "./concepts/handle-one-error/concept.ts"
 import { hiddenDependencies } from "./concepts/hidden-dependencies/concept.ts"
+import { implementHandlers } from "./concepts/implement-handlers/concept.ts"
 import { layersThatNeedLayers } from "./concepts/layers-that-need-layers/concept.ts"
 import { namedErrors } from "./concepts/named-errors/concept.ts"
 import { provideWithALayer } from "./concepts/provide-with-a-layer/concept.ts"
@@ -20,6 +24,8 @@ import { refineAndBrand } from "./concepts/refine-and-brand/concept.ts"
 import { runAtTheEdge } from "./concepts/run-at-the-edge/concept.ts"
 import { schemaErrors } from "./concepts/schema-errors/concept.ts"
 import { sequenceWithGen } from "./concepts/sequence-with-gen/concept.ts"
+import { serveAWorkingApi } from "./concepts/serve-a-working-api/concept.ts"
+import { serveIt } from "./concepts/serve-it/concept.ts"
 import { swapForATest } from "./concepts/swap-for-a-test/concept.ts"
 import { thrownErrorsHide } from "./concepts/thrown-errors-hide/concept.ts"
 import { transformWithPipe } from "./concepts/transform-with-pipe/concept.ts"
@@ -55,5 +61,11 @@ export const concepts = [
   decodeAtTheBoundary,
   encodeForTheWire,
   refineAndBrand,
-  schemaErrors
+  schemaErrors,
+  apiIsAContract,
+  implementHandlers,
+  errorsBecomeStatuses,
+  serveIt,
+  callItTyped,
+  serveAWorkingApi
 ] as const
